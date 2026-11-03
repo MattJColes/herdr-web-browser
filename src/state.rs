@@ -81,8 +81,8 @@ impl Config {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
-    #[default]
     Headed,
+    #[default]
     Headless,
 }
 
