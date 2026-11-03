@@ -6,31 +6,31 @@ A web browser built into [herdr](https://herdr.dev). Pages open in a pane next t
 
 ## What it does
 
-### It's part of herdr
+### Opens from herdr's + menu
 
 Pick **Browser** from herdr desktop's + menu and it opens as a split beside your agent, on Google or a home page you choose. There's no extra window to manage. It follows your herdr theme, each agent gets its own tab, and Chrome stays hidden until you click the window button.
 
 ![Browser in herdr desktop's + menu, next to the coding agents](docs/screenshots/plus-menu.png)
 
-### Your agent uses it in every project
+### Web previews for every agent, in every project
 
 Run `install-agents` once and Claude Code, Codex, OpenCode and Pi open their previews here in every project. Ask "show me localhost:3000" and the page appears beside the agent. The agent can read the page, click buttons, fill in forms and take screenshots.
 
-### Your agent can debug what it sees
+### Console and network debugging for agents
 
 `herdr-web-browser console` gives the agent the page's console output and errors with stack traces. `herdr-web-browser network` gives it every request with its status code, failures first. The agent can fix the code, reload and check again while you watch, with no DevTools.
 
-### You can show the agent what you mean
+### Send screenshots and selections to your agent
 
 One click sends the agent a screenshot. A shortcut or Chrome's right-click menu sends the page text or your selection. The agent can also ask you to click an element on the page and gets back exactly which one you picked.
 
-### You don't sign in again
+### Import logins (cookies) from Chrome
 
 The cog in the view opens settings. Search and tick the sites you're signed in to in Chrome, and those logins come across. Only the sites you tick are copied, because every agent using the browser can use them.
 
 ![Browser settings: pick a Chrome profile, then search and tick the sites to sign in to](docs/screenshots/settings.png)
 
-### Your own Chrome stays untouched
+### Separate from your own Chrome
 
 It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing)) with its own profile, so your everyday browser, its windows and its logins are left alone. Chrome's control port only accepts connections from your machine.
 

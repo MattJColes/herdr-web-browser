@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Notes · localhost:3000</title>
+<!-- The demo app in the README screenshots. Serve it with:
+     python3 -m http.server 3000 --directory docs/demo
+     Saving a note logs to the console and POSTs to /api/notes, which the plain
+     http.server answers with 501: something for `console` and `network` to catch. -->
+<style>
+  :root { color-scheme: light; --paper: #f7f0e1; --rule: #c9d6e3; --margin: #d9534f; --ink: #2b2a33; --leather: #5a3a24; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 18px/32px "Iowan Old Style", "Palatino", Georgia, serif; color: var(--ink); background: var(--paper); }
+  .book { position: relative; min-height: 100vh; overflow: hidden; background: var(--paper); box-shadow: 6px 0 0 #e9dfca inset; display: flex; flex-direction: column; }
+  /* Elastic strap down the right-hand edge. */
+  .book::after { content: ""; position: absolute; top: 0; bottom: 0; right: 34px; width: 14px; background: linear-gradient(90deg, #1d1d1f, #3b3b40 50%, #1d1d1f); opacity: .92; }
+  header {
+    position: relative; padding: 22px 64px 20px 36px; color: #f3e6cf;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(255,255,255,.08), transparent 40%),
+      repeating-linear-gradient(45deg, rgba(0,0,0,.05) 0 2px, transparent 2px 5px),
+      linear-gradient(180deg, #6b4630, var(--leather) 60%, #4a2f1d);
+  }
+  /* Stitching just inside the leather's edge. */
+  header::before { content: ""; position: absolute; inset: 8px; border: 2px dashed rgba(243,230,207,.45); border-radius: 6px; pointer-events: none; }
+  header h1 { margin: 0; font-size: 30px; letter-spacing: .5px; font-weight: 600; text-shadow: 0 1px 0 rgba(0,0,0,.5), 0 -1px 0 rgba(255,255,255,.12); }
+  header p { margin: 2px 0 0; font-size: 14px; font-style: italic; opacity: .75; line-height: 20px; }
+  /* Ribbon bookmark hanging over the page. */
+  .ribbon { position: absolute; top: 0; right: 92px; width: 18px; height: 120px; background: #a4232b; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%); z-index: 2; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
+  main {
+    padding: 28px 80px 40px 92px; position: relative; flex: 1;
+    background: linear-gradient(90deg, transparent 72px, var(--margin) 72px, var(--margin) 74px, transparent 74px), repeating-linear-gradient(180deg, transparent 0 31px, var(--rule) 31px 32px);
+    background-attachment: local;
+  }
+  h2 { margin: 0; font-size: 22px; line-height: 32px; font-weight: 600; }
+  .hint { margin: 0 0 6px; font-style: italic; color: #6b6458; font-size: 16px; }
+  form { display: flex; gap: 12px; align-items: center; margin-bottom: 32px; }
+  input { flex: 1; font: inherit; color: var(--ink); background: transparent; border: 0; border-bottom: 2px solid #8a7b64; padding: 0 2px; height: 32px; outline: none; }
+  input::placeholder { color: #a39a88; font-style: italic; }
+  button { font: 600 15px/1 "Iowan Old Style", Georgia, serif; color: #f3e6cf; background: linear-gradient(180deg, #6b4630, var(--leather)); border: 1px solid #3c2617; border-radius: 6px; padding: 9px 16px; box-shadow: 0 2px 0 #3c2617, inset 0 1px 0 rgba(255,255,255,.15); cursor: pointer; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { height: 32px; font-family: "Bradley Hand", "Segoe Print", "Marker Felt", cursive; font-size: 21px; }
+  .tag { margin-left: 10px; font: 600 12px/1 "Iowan Old Style", Georgia, serif; letter-spacing: 1px; text-transform: uppercase; color: #a4232b; border: 2px solid #a4232b; border-radius: 4px; padding: 2px 6px; display: inline-block; transform: rotate(-4deg) translateY(-3px); opacity: .85; }
+  .done { text-decoration: line-through; text-decoration-color: #a4232b; color: #7d7568; }
+</style>
+</head>
+<body>
+<div class="book">
+  <div class="ribbon"></div>
+  <header><h1>Acme Notes</h1><p>dev server · localhost:3000</p></header>
+  <main>
+    <h2>Add a note</h2>
+    <p class="hint">Your agent can fill this in, click Save, and check the result.</p>
+    <form id="f"><input id="note" placeholder="Write a note…" aria-label="Write a note…"><button>Save note</button></form>
+    <h2>Notes</h2>
+    <ul id="list">
+      <li>Ship the onboarding flow <span class="tag">today</span></li>
+      <li>Fix the date picker on Safari</li>
+      <li class="done">Write release notes for v2.3</li>
+    </ul>
+  </main>
+</div>
+<script>
+  document.getElementById("f").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = document.getElementById("note");
+    const text = input.value.trim();
+    if (!text) return;
+    const li = document.createElement("li");
+    li.textContent = text + " ";
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = "new";
+    li.append(tag);
+    document.getElementById("list").prepend(li);
+    console.log("saved note:", text);
+    fetch("/api/notes", { method: "POST", body: text })
+      .then((r) => { if (!r.ok) console.error("sync failed:", r.status, r.statusText); });
+    input.value = "";
+  });
+</script>
+</body>
+</html>
