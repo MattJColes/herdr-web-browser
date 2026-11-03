@@ -19,29 +19,19 @@ fn env_dir(var: &str) -> Option<PathBuf> {
 /// Herdr sets HERDR_PLUGIN_STATE_DIR for plugin commands; agents calling the CLI
 /// from their shell don't have it, so fall back to the same path herdr uses.
 pub fn state_dir() -> PathBuf {
-    env_dir("HERDR_PLUGIN_STATE_DIR").unwrap_or_else(|| {
-        env_dir("XDG_STATE_HOME")
-            .unwrap_or_else(|| home().join(".local/state"))
-            .join("herdr/plugins")
-            .join(PLUGIN_ID)
-    })
+    env_dir("HERDR_PLUGIN_STATE_DIR")
+        .unwrap_or_else(|| env_dir("XDG_STATE_HOME").unwrap_or_else(|| home().join(".local/state")).join("herdr/plugins").join(PLUGIN_ID))
 }
 
 pub fn config_dir() -> PathBuf {
-    env_dir("HERDR_PLUGIN_CONFIG_DIR").unwrap_or_else(|| {
-        env_dir("XDG_CONFIG_HOME")
-            .unwrap_or_else(|| home().join(".config"))
-            .join("herdr/plugins/config")
-            .join(PLUGIN_ID)
-    })
+    env_dir("HERDR_PLUGIN_CONFIG_DIR")
+        .unwrap_or_else(|| env_dir("XDG_CONFIG_HOME").unwrap_or_else(|| home().join(".config")).join("herdr/plugins/config").join(PLUGIN_ID))
 }
 
 /// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-web-browser`.
 pub fn plugin_root() -> PathBuf {
     env_dir("HERDR_PLUGIN_ROOT").unwrap_or_else(|| {
-        let exe = std::env::current_exe()
-            .and_then(fs::canonicalize)
-            .expect("cannot locate own executable");
+        let exe = std::env::current_exe().and_then(fs::canonicalize).expect("cannot locate own executable");
         exe.ancestors().nth(3).map(Path::to_path_buf).unwrap_or_default()
     })
 }

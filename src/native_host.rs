@@ -1,8 +1,8 @@
 //! Chrome native-messaging host: one request from the extension, one reply.
 //! Wire format: 4-byte native-endian (little on our targets) length, then UTF-8 JSON.
 
-use crate::agent::{self, deliver, save_shot_in, screenshot_prompt, wrap};
 use crate::R;
+use crate::agent::{self, deliver, save_shot_in, screenshot_prompt, wrap};
 use crate::state::Config;
 use base64::Engine;
 use serde::Deserialize;

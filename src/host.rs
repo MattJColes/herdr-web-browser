@@ -249,14 +249,10 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
 
 /// The herdr desktop tab and pane that hold `terminal`, from `herdr-app ls`.
 fn desktop_place(ls: &Value, terminal: &str) -> Option<(String, String)> {
-    ls["spaces"]
-        .as_array()?
-        .iter()
-        .flat_map(|sp| sp["tabs"].as_array().into_iter().flatten())
-        .find_map(|tab| {
-            let t = tab["terminals"].as_array()?.iter().find(|t| t["terminal"] == terminal)?;
-            Some((s(tab, "id"), s(t, "pane"))).filter(|(_, p)| !p.is_empty())
-        })
+    ls["spaces"].as_array()?.iter().flat_map(|sp| sp["tabs"].as_array().into_iter().flatten()).find_map(|tab| {
+        let t = tab["terminals"].as_array()?.iter().find(|t| t["terminal"] == terminal)?;
+        Some((s(tab, "id"), s(t, "pane"))).filter(|(_, p)| !p.is_empty())
+    })
 }
 
 /// herdr desktop's + menu always starts programs in a new tab. Move the browser into a
@@ -297,14 +293,7 @@ fn live_view_for(owner: &str) -> Option<String> {
 /// Live herdr-core terminal addresses, or None when hc isn't reachable.
 pub fn live_hc_terminals() -> Option<Vec<String>> {
     let v = run("hc", &["ls", "--json"]).ok()?;
-    Some(
-        v["terminals"]
-            .as_array()?
-            .iter()
-            .filter(|t| t["state"] == "live")
-            .map(|t| s(t, "address"))
-            .collect(),
-    )
+    Some(v["terminals"].as_array()?.iter().filter(|t| t["state"] == "live").map(|t| s(t, "address")).collect())
 }
 
 /// TUI pane ids look like `w1:p2`; herdr-core addresses like `t5` or `machine/t5`.

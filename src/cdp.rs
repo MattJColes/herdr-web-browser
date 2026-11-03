@@ -15,10 +15,7 @@ pub struct Cdp {
 
 impl Cdp {
     pub fn connect(url: &str) -> R<Cdp> {
-        let host = url
-            .strip_prefix("ws://")
-            .and_then(|r| r.split('/').next())
-            .ok_or_else(|| format!("bad CDP url: {url}"))?;
+        let host = url.strip_prefix("ws://").and_then(|r| r.split('/').next()).ok_or_else(|| format!("bad CDP url: {url}"))?;
         let addr = host.to_socket_addrs()?.next().ok_or("CDP host did not resolve")?;
         let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(3))?;
         stream.set_write_timeout(Some(Duration::from_secs(10)))?;
@@ -50,11 +47,7 @@ impl Cdp {
                 Ok(Message::Text(t)) => Ok(Some(serde_json::from_str(t.as_str())?)),
                 Ok(Message::Close(_)) => Err("browser closed the CDP connection".into()),
                 Ok(_) => continue,
-                Err(tungstenite::Error::Io(e))
-                    if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) =>
-                {
-                    Ok(None)
-                }
+                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => Ok(None),
                 Err(e) => Err(e.into()),
             };
         }
@@ -90,11 +83,7 @@ impl Cdp {
         });
         let r = self.call_timeout("Runtime.evaluate", params, Some(session), timeout)?;
         if let Some(ex) = r.get("exceptionDetails") {
-            let m = ex
-                .pointer("/exception/description")
-                .or_else(|| ex.get("text"))
-                .and_then(Value::as_str)
-                .unwrap_or("JS exception");
+            let m = ex.pointer("/exception/description").or_else(|| ex.get("text")).and_then(Value::as_str).unwrap_or("JS exception");
             return Err(m.lines().next().unwrap_or(m).to_string().into());
         }
         Ok(r.pointer("/result/value").cloned().unwrap_or(Value::Null))

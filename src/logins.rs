@@ -107,11 +107,7 @@ fn filter(sites: &[String]) -> String {
     if sites.is_empty() {
         return "1".into();
     }
-    sites
-        .iter()
-        .map(|s| format!("(host_key = '{s}' OR host_key = '.{s}' OR host_key LIKE '%.{s}')"))
-        .collect::<Vec<_>>()
-        .join(" OR ")
+    sites.iter().map(|s| format!("(host_key = '{s}' OR host_key = '.{s}' OR host_key LIKE '%.{s}')")).collect::<Vec<_>>().join(" OR ")
 }
 
 /// Sites holding cookies in Chrome (signed in, mostly), with their cookie counts.
@@ -256,10 +252,7 @@ mod tests {
         pbkdf2::pbkdf2_hmac::<sha1::Sha1>(b"peanuts", b"saltysalt", 1, &mut key);
         let plain = [&[7u8; 32][..], b"secret123"].concat();
         let mut buf = vec![0u8; plain.len() + 16];
-        let n = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into())
-            .encrypt_padded_b2b_mut::<Pkcs7>(&plain, &mut buf)
-            .unwrap()
-            .len();
+        let n = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into()).encrypt_padded_b2b_mut::<Pkcs7>(&plain, &mut buf).unwrap().len();
         let enc = [b"v10", &buf[..n]].concat();
         assert_eq!(decrypt(&enc, &key, true).unwrap(), "secret123");
         assert!(decrypt(&enc, &[0u8; 16], true).is_err());

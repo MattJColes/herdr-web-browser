@@ -2,13 +2,15 @@
 
 A web browser built into [herdr](https://herdr.dev). Pages open in a pane next to your coding agent, so you and your agent see the same page and can hand it to each other without leaving herdr.
 
-![herdr desktop with the browser open beside an agent](docs/screenshots/herdr-desktop.png)
+![An agent's terminal beside the browser, showing the page's console error and failed request](docs/screenshots/herdr-desktop.png)
 
 ## What it does
 
 ### It's part of herdr
 
 Pick **Browser** from herdr desktop's + menu and it opens as a split beside your agent, on Google or a home page you choose. There's no extra window to manage. It follows your herdr theme, each agent gets its own tab, and Chrome stays hidden until you click the window button.
+
+![Browser in herdr desktop's + menu, next to the coding agents](docs/screenshots/plus-menu.png)
 
 ### Your agent uses it in every project
 
@@ -26,14 +28,11 @@ One click sends the agent a screenshot. A shortcut or Chrome's right-click menu 
 
 The cog in the view opens settings. Search and tick the sites you're signed in to in Chrome, and those logins come across. Only the sites you tick are copied, because every agent using the browser can use them.
 
+![Browser settings: pick a Chrome profile, then search and tick the sites to sign in to](docs/screenshots/settings.png)
+
 ### Your own Chrome stays untouched
 
 It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing)) with its own profile, so your everyday browser, its windows and its logins are left alone. Chrome's control port only accepts connections from your machine.
-
-<p>
-  <img src="docs/screenshots/plus-menu.png" alt="Browser in herdr desktop's + menu" width="360">
-  <img src="docs/screenshots/live-view.png" alt="The live view" width="360">
-</p>
 
 ## What you need
 
@@ -203,6 +202,7 @@ herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you 
 ```sh
 cargo test                     # unit tests
 cargo test -- --ignored        # also drives a real headless Chrome
+git config core.hooksPath .githooks   # once per clone: fmt, clippy and tests before each commit
 python3 tests/view_e2e.py      # clicks every control in the live view
 E2E_WINDOW=1 python3 tests/view_e2e.py   # also the window button (opens a real Chrome window)
 ```
