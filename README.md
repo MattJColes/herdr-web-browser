@@ -6,17 +6,21 @@ A web browser for [herdr](https://herdr.dev). It shows pages in a pane right nex
 
 ## Features
 
-- **Browse beside your agent.** A live page view sits in a herdr pane, with an address bar, back/forward/reload, tabs and a toolbar. Click, scroll and type as normal.
+- **Browse beside your agent.** A live page view sits in a herdr pane, with an address bar, back/forward/reload, and screenshot and window buttons. Click, scroll and type as normal.
+- **One click from the + menu.** In herdr desktop, **Browser** sits in the + menu next to your agents. It opens as a split beside the agent you were using, on your home page.
 - **Your agent can use it too.** Agents open pages, read text, click buttons, fill in forms and take screenshots, all with simple commands.
-- **Send anything to your agent in one click.** Send the page, the text you selected, or a screenshot.
+- **Send anything to your agent.** One click sends a screenshot. A shortcut or Chrome's right-click menu sends the page or the text you selected.
 - **Show the agent what you mean.** The agent can ask you to click an element on the page and gets back exactly which one you picked.
 - **Test your local site.** Open `localhost:3000` (or any dev server) and check changes as you make them.
 - **One tab per agent.** Several agents can browse at the same time without getting in each other's way.
-- **Inside herdr or in a window.** Run Chrome hidden and see it only in herdr, or switch to a normal browser window at any time. Your tabs stay open.
+- **Inside herdr or in a window.** Chrome runs hidden and you see it only in herdr. Click the window button when you want a normal browser window; it never pops up on its own. Your tabs stay open.
 - **Fits in.** Follows your herdr desktop theme and works in herdr desktop and the herdr terminal app.
 - **Private by default.** Uses its own Chrome profile, separate from your everyday browser, and only listens on your machine.
 
-![The live view](docs/screenshots/live-view.png)
+<p>
+  <img src="docs/screenshots/plus-menu.png" alt="Browser in herdr desktop's + menu" width="360">
+  <img src="docs/screenshots/live-view.png" alt="The live view" width="360">
+</p>
 
 ## What you need
 
@@ -42,7 +46,7 @@ Then set it up for the herdr you use.
 herdr-web-browser install-desktop
 ```
 
-This adds the browser's menu, agent picker and icon to herdr desktop. To open the menu with a shortcut, add this to `~/.config/herdr-app/keys.json` under `"global"`:
+This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon. To open the browser's menu with a shortcut, add this to `~/.config/herdr-app/keys.json` under `"global"`:
 
 ```json
 "cmd-shift-b": "mod.open:herdr-web-browser"
@@ -67,6 +71,7 @@ The agent runs `herdr-web-browser open localhost:3000 --show`, which loads the p
 | Where | How |
 |---|---|
 | Any terminal in herdr | `herdr-web-browser open <address> --show` |
+| herdr desktop | Click **+** at the top right and choose **Browser**. It opens beside your agent on your home page (Google unless you set `home_page`). |
 | herdr desktop | Press your menu shortcut (above) and choose **Open live view** |
 | herdr (terminal app) | Run the **Browser: open** action |
 
@@ -76,7 +81,7 @@ If the view is already open, running it again reuses it.
 
 1. Start your dev server as usual (for example `npm run dev`).
 2. Ask your agent to open it, or run `herdr-web-browser open localhost:3000 --show`.
-3. Edit your code, then press **Reload** in the toolbar. You can also ask the agent to check the page for you.
+3. Edit your code, then press **Reload** (↻) next to the address bar. You can also ask the agent to check the page for you.
 
 Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself.
 
@@ -91,15 +96,13 @@ Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-h
 | Control | What it does |
 |---|---|
 | ← → ↻ | Back, forward, reload |
-| Address bar | Click it, type an address, press Enter. Esc cancels. |
-| ‹ › | Previous / next tab. The agent beside the view uses the tab you pick. |
-| Send | Send the page's text to the agent |
-| Selection | Send the text you've selected |
-| Camera | Send a screenshot |
+| Address bar | Click it, type an address, press Enter. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
+| Camera | Send a screenshot to the agent |
 | Window | Switch between a hidden browser (shown only in herdr) and a normal Chrome window |
-| ✕ | Close the view (the browser keeps running) |
 
-Hover over a button to see its name. Keyboard shortcuts: `Ctrl-L` address bar, `Ctrl-B`/`Ctrl-F` back/forward, `Ctrl-R` reload, `Ctrl-N`/`Ctrl-P` next/previous tab, `Ctrl-G` send page, `Ctrl-S` send selection, `Ctrl-X` screenshot, `Ctrl-E` window mode, `Ctrl-Q` close.
+Hover over a button and its name shows in the address bar, which also shows messages such as "sent screenshot" for a few seconds.
+
+Keyboard shortcuts: `Ctrl-L` address bar, `Ctrl-B`/`Ctrl-F` back/forward, `Ctrl-R` reload, `Ctrl-N`/`Ctrl-P` next/previous tab (the agent beside the view uses the tab you pick), `Ctrl-G` send page, `Ctrl-S` send selection, `Ctrl-X` screenshot, `Ctrl-E` window mode, `Ctrl-Q` close the view (the browser keeps running).
 
 Inside Chrome itself, right-click to send a selection, page, link or screenshot to your agent.
 
@@ -119,6 +122,7 @@ Optional. Put them in `~/.config/herdr/plugins/config/herdr-web-browser/config.t
 default_agent = "reviewer"    # agent to send to when there's a choice
 chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # if it can't find your browser
 max_chars = 20000             # longest page text sent to an agent
+home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
 view_renderer = "blocks"      # if the view stays blank in your terminal
 cell_aspect = 2.6             # if the page looks stretched
 ```
@@ -128,7 +132,7 @@ cell_aspect = 2.6             # if the page looks stretched
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font).
 - **"No Chrome found".** Set `chrome_path`.
-- **Want a real window?** Click **Window**, or run `herdr-web-browser mode headed`.
+- **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden.
 
 ## For agents
 
@@ -159,6 +163,7 @@ herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you 
 cargo test                     # unit tests
 cargo test -- --ignored        # also drives a real headless Chrome
 python3 tests/view_e2e.py      # clicks every control in the live view
+E2E_WINDOW=1 python3 tests/view_e2e.py   # also the window button (opens a real Chrome window)
 ```
 
 ## License
