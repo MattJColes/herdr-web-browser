@@ -15,6 +15,7 @@ mod page;
 mod pane;
 mod render;
 mod state;
+mod uninstall;
 mod view;
 
 use agent::SendKind;
@@ -151,6 +152,13 @@ enum Cmd {
     InstallAgents,
     /// Download Chrome for Testing for this browser, so it never takes over your own Chrome app.
     InstallBrowser,
+    /// Undo the install-* commands: agent instructions, desktop mods, the CLI link. Then run
+    /// `herdr plugin uninstall herdr-web-browser`.
+    Uninstall {
+        /// Also delete the browser's profile (logins, history), Chrome for Testing and screenshots.
+        #[arg(long)]
+        purge: bool,
+    },
     /// Copy your Google Chrome sign-ins (cookies) into this browser. Every agent can then use
     /// those sites as you. Pass sites (`github.com`), --all, or --list to see what's there.
     ImportLogins {
@@ -296,12 +304,17 @@ fn install_cli() -> R<String> {
 const DESKTOP_MODS: &[&str] =
     &["herdr-web-browser", "herdr-web-browser-picker", "herdr-web-browser-toast", "herdr-web-browser-theme", "herdr-web-browser-settings"];
 
+/// Herdr.app's home folder (mods, programs.json).
+fn desktop_home() -> PathBuf {
+    std::env::var_os("HERDR_APP_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"))
+}
+
 /// Copy the desktop mods into Herdr.app's home with this binary's path baked in, then check them.
 fn install_desktop() -> R<String> {
     let exe = std::fs::canonicalize(std::env::current_exe()?)?;
-    let home = std::env::var_os("HERDR_APP_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"));
+    let home = desktop_home();
     if !home.is_dir() {
         return Err(format!("{} not found; is herdr desktop installed?", home.display()).into());
     }
@@ -571,6 +584,11 @@ fn run(cli: Cli) -> R<()> {
             let n = logins::import(&cfg, &profile, &sites)?;
             let what = if all { "every site".to_string() } else { sites.join(", ") };
             print(j, format!("imported {n} cookies for {what} from Chrome"), json!({ "cookies": n, "sites": sites }));
+        }
+        Cmd::Uninstall { purge } => {
+            let done = uninstall::run(purge)?;
+            let text = if done.is_empty() { "nothing to remove".to_string() } else { done.join("\n") };
+            print(j, text, json!({ "removed": done }));
         }
         Cmd::InstallBrowser => {
             // Restart around the swap so a running browser comes back on the new copy, tabs kept.
