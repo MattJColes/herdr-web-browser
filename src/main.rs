@@ -336,11 +336,51 @@ fn install_desktop() -> R<String> {
         host::run("herdr-app", &["check", &dst.display().to_string()]).map_err(|e| format!("mod {name} failed its check: {e}"))?;
     }
     register_program(&home)?;
-    Ok(format!(
-        "installed {} into {}; open the menu with `mod.open:herdr-web-browser` (e.g. bind it in keys.json)",
-        DESKTOP_MODS.join(", "),
-        home.join("mods").display()
-    ))
+    let keys = home.join("keys.json");
+    let mut doc = read_json(&keys)?;
+    let key = match bind_menu_key(&mut doc)? {
+        MenuKey::Added => {
+            std::fs::write(&keys, serde_json::to_vec_pretty(&doc)?)?;
+            format!("{MENU_KEY} opens the menu")
+        }
+        MenuKey::AlreadyBound => "the menu already has a shortcut".into(),
+        MenuKey::Taken => format!("{MENU_KEY} is taken; bind `{MENU_ACTION}` in {}", keys.display()),
+    };
+    Ok(format!("installed {} into {}; {key}", DESKTOP_MODS.join(", "), home.join("mods").display()))
+}
+
+pub(crate) const MENU_KEY: &str = "cmd-shift-b";
+pub(crate) const MENU_ACTION: &str = "mod.open:herdr-web-browser";
+
+#[derive(Debug, PartialEq)]
+enum MenuKey {
+    Added,
+    AlreadyBound,
+    Taken,
+}
+
+/// Bind MENU_KEY to the browser menu in keys.json's `global`, unless the menu has a key already
+/// or the user uses MENU_KEY for something else.
+fn bind_menu_key(doc: &mut Value) -> R<MenuKey> {
+    let global = doc.as_object_mut().ok_or("keys.json is not an object")?.entry("global").or_insert_with(|| json!({}));
+    let global = global.as_object_mut().ok_or("keys.json `global` is not an object")?;
+    if global.values().any(|v| v == MENU_ACTION) {
+        return Ok(MenuKey::AlreadyBound);
+    }
+    if global.contains_key(MENU_KEY) {
+        return Ok(MenuKey::Taken);
+    }
+    global.insert(MENU_KEY.into(), json!(MENU_ACTION));
+    Ok(MenuKey::Added)
+}
+
+/// A JSON config file, or `{}` when it doesn't exist yet. Refuses to touch a file it can't parse.
+fn read_json(path: &std::path::Path) -> R<Value> {
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(serde_json::from_str(&s).map_err(|e| format!("{}: {e}; not changing it", path.display()))?),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Give the live view its own name and icon in herdr desktop (instead of a generic terminal),
@@ -348,11 +388,7 @@ fn install_desktop() -> R<String> {
 fn register_program(home: &std::path::Path) -> R<()> {
     let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
     let path = home.join("programs.json");
-    let mut doc: Value = match std::fs::read_to_string(&path) {
-        Ok(s) => serde_json::from_str(&s).map_err(|e| format!("{}: {e}; not changing it", path.display()))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
-        Err(e) => return Err(e.into()),
-    };
+    let mut doc = read_json(&path)?;
     let programs = doc.as_object_mut().ok_or("programs.json is not an object")?.entry("programs").or_insert_with(|| json!({}));
     programs.as_object_mut().ok_or("programs.json `programs` is not an object")?.insert(
         "herdr-web-browser".into(),
@@ -557,7 +593,14 @@ fn run(cli: Cli) -> R<()> {
             print(j, t.clone().unwrap_or_else(|| "auto".into()), json!({ "target": t }));
         }
         Cmd::InstallCli => {
-            let msg = install_cli()?;
+            let mut msg = install_cli()?;
+            // herdr runs this at startup: set up herdr desktop the first time we find it.
+            if desktop_home().is_dir() && !desktop_home().join("mods").join(DESKTOP_MODS[0]).is_dir() {
+                match install_desktop() {
+                    Ok(m) => msg = format!("{msg}\n{m}"),
+                    Err(e) => msg = format!("{msg}\nherdr desktop setup failed: {e}; run `herdr-web-browser install-desktop`"),
+                }
+            }
             print(j, msg.clone(), json!({ "message": msg }));
         }
         Cmd::InstallDesktop => {
@@ -680,5 +723,26 @@ mod tests {
         let ev = json!({ "event": "pane.moved", "data": { "previous_pane_id": "w1:p2", "pane": { "pane_id": "w2:p5" } } });
         assert_eq!(find(&ev, "previous_pane_id"), Some(&json!("w1:p2")));
         assert_eq!(find(&ev, "pane").and_then(|p| p["pane_id"].as_str()), Some("w2:p5"));
+    }
+
+    #[test]
+    fn binds_menu_key_in_empty_keys() {
+        let mut doc = json!({});
+        assert_eq!(bind_menu_key(&mut doc).unwrap(), MenuKey::Added);
+        assert_eq!(doc["global"][MENU_KEY], MENU_ACTION);
+    }
+
+    #[test]
+    fn keeps_users_binding_for_menu_key() {
+        let mut doc = json!({ "global": { MENU_KEY: "app.other" } });
+        assert_eq!(bind_menu_key(&mut doc).unwrap(), MenuKey::Taken);
+        assert_eq!(doc["global"][MENU_KEY], "app.other");
+    }
+
+    #[test]
+    fn leaves_existing_menu_shortcut() {
+        let mut doc = json!({ "global": { "cmd-alt-b": MENU_ACTION } });
+        assert_eq!(bind_menu_key(&mut doc).unwrap(), MenuKey::AlreadyBound);
+        assert!(doc["global"].get(MENU_KEY).is_none());
     }
 }

@@ -51,7 +51,7 @@ From herdr's [plugin marketplace](https://herdr.dev/plugins/), in the herdr term
 herdr plugin install MattJColes/herdr-web-browser   # builds it with cargo, so you need Rust
 ```
 
-herdr puts the `herdr-web-browser` command on your PATH each time it starts. Then run `herdr-web-browser install-browser` and `herdr-web-browser install-agents` (both also appear as **Browser:** actions), and `herdr-web-browser install-desktop` if you use herdr desktop. They're explained below.
+herdr puts the `herdr-web-browser` command on your PATH each time it starts. Then run `herdr-web-browser install-browser` and `herdr-web-browser install-agents` (both also appear as **Browser:** actions), If herdr desktop is installed, the first start also runs `herdr-web-browser install-desktop` for you. They're explained below.
 
 Or from source:
 
@@ -76,11 +76,7 @@ Then set it up for the herdr you use.
 herdr-web-browser install-desktop
 ```
 
-This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon. To open the browser's menu with a shortcut, add this to `~/.config/herdr-app/keys.json` under `"global"`:
-
-```json
-"cmd-shift-b": "mod.open:herdr-web-browser"
-```
+This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon, and binds `cmd-shift-b` to open the browser's menu in `~/.config/herdr-app/keys.json`. It leaves the shortcut alone if you already bound the menu to another key or use `cmd-shift-b` for something else. herdr runs it automatically the first time it starts with herdr desktop installed.
 
 **herdr (terminal app)**
 

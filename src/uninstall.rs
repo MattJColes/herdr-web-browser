@@ -4,7 +4,7 @@ use crate::{R, agent_setup, chrome, state};
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Remove agent instructions, desktop mods and their programs.json entry, and the CLI link;
+/// Remove agent instructions, desktop mods, their programs.json entry and menu shortcut, and the CLI link;
 /// with `purge`, also the browser's state (profile, Chrome for Testing, screenshots).
 /// Returns what was removed.
 pub fn run(purge: bool) -> R<Vec<String>> {
@@ -27,6 +27,18 @@ pub fn run(purge: bool) -> R<Vec<String>> {
         if doc["programs"].as_object_mut().and_then(|p| p.remove("herdr-web-browser")).is_some() {
             std::fs::write(&programs, serde_json::to_vec_pretty(&doc)?)?;
             done.push(format!("removed Browser from {}", programs.display()));
+        }
+    }
+    let keys = app.join("keys.json");
+    if let Ok(text) = std::fs::read_to_string(&keys) {
+        let mut doc: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}; not changing it", keys.display()))?;
+        if let Some(g) = doc["global"].as_object_mut() {
+            let before = g.len();
+            g.retain(|_, v| v != crate::MENU_ACTION);
+            if g.len() != before {
+                std::fs::write(&keys, serde_json::to_vec_pretty(&doc)?)?;
+                done.push(format!("removed the browser menu shortcut from {}", keys.display()));
+            }
         }
     }
     let link = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".local/bin/herdr-web-browser");
