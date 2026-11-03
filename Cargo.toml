@@ -7,18 +7,18 @@ license = "MIT"
 repository = "https://github.com/MattJColes/herdr-web-browser"
 
 [dependencies]
-aes = "0.8"
+aes = "0.9"
 base64 = "0.23"
-cbc = "0.1"
+cbc = "0.2"
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.29"
 libc = "0.2"
-pbkdf2 = "0.12"
+pbkdf2 = "0.13"
 png = "0.18"
 resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha1 = "0.10"
+sha1 = "0.11"
 toml = "1.1"
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 

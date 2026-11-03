@@ -8,7 +8,7 @@ use crate::R;
 use crate::cdp::Cdp;
 use crate::chrome;
 use crate::state::{self, Config};
-use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::Pkcs7};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -145,9 +145,8 @@ fn chrome_key(prefix: &str) -> R<[u8; 16]> {
 /// 32-byte SHA-256 of the cookie's domain.
 fn decrypt(enc: &[u8], key: &[u8; 16], domain_hash: bool) -> R<String> {
     let mut buf = enc.get(3..).ok_or("encrypted value too short")?.to_vec();
-    let plain = Aes128CbcDec::new(key.into(), &[b' '; 16].into())
-        .decrypt_padded_mut::<Pkcs7>(&mut buf)
-        .map_err(|_| "couldn't decrypt a cookie (wrong key?)")?;
+    let plain =
+        Aes128CbcDec::new(key.into(), &[b' '; 16].into()).decrypt_padded::<Pkcs7>(&mut buf).map_err(|_| "couldn't decrypt a cookie (wrong key?)")?;
     let value = if domain_hash { plain.get(32..).unwrap_or_default() } else { plain };
     Ok(String::from_utf8_lossy(value).into_owned())
 }
@@ -223,7 +222,7 @@ pub fn import(cfg: &Config, profile: &str, sites: &[String]) -> R<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aes::cipher::BlockEncryptMut;
+    use aes::cipher::BlockModeEncrypt;
 
     #[test]
     fn hosts_group_by_site() {
@@ -252,7 +251,7 @@ mod tests {
         pbkdf2::pbkdf2_hmac::<sha1::Sha1>(b"peanuts", b"saltysalt", 1, &mut key);
         let plain = [&[7u8; 32][..], b"secret123"].concat();
         let mut buf = vec![0u8; plain.len() + 16];
-        let n = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into()).encrypt_padded_b2b_mut::<Pkcs7>(&plain, &mut buf).unwrap().len();
+        let n = cbc::Encryptor::<aes::Aes128>::new(&key.into(), &[b' '; 16].into()).encrypt_padded_b2b::<Pkcs7>(&plain, &mut buf).unwrap().len();
         let enc = [b"v10", &buf[..n]].concat();
         assert_eq!(decrypt(&enc, &key, true).unwrap(), "secret123");
         assert!(decrypt(&enc, &[0u8; 16], true).is_err());
