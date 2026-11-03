@@ -1,23 +1,34 @@
 # herdr-web-browser
 
-A web browser for [herdr](https://herdr.dev). It shows pages in a pane right next to your coding agent. You can use the page yourself, the agent can use it too, and either of you can pass what's on screen to the other.
+A web browser built into [herdr](https://herdr.dev). Pages open in a pane next to your coding agent, so you and your agent see the same page and can hand it to each other without leaving herdr.
 
 ![herdr desktop with the browser open beside an agent](docs/screenshots/herdr-desktop.png)
 
-## Features
+## What it does
 
-- **Browse beside your agent.** A live page view sits in a herdr pane, with an address bar, back/forward/reload, and screenshot and window buttons. Click, scroll and type as normal.
-- **One click from the + menu.** In herdr desktop, **Browser** sits in the + menu next to your agents. It opens as a split beside the agent you were using, on your home page.
-- **Your agent can use it too, in every project.** One setup step teaches Claude Code, Codex, OpenCode and Pi to open previews here. Agents open pages, read text, click buttons, fill in forms and take screenshots.
-- **Agents can debug what they see.** Console output, errors with stack traces and failed requests, without DevTools.
-- **Your logins, if you want them.** Copy the sites you're signed in to in Google Chrome, picked from a searchable list.
-- **Send anything to your agent.** One click sends a screenshot. A shortcut or Chrome's right-click menu sends the page or the text you selected.
-- **Show the agent what you mean.** The agent can ask you to click an element on the page and gets back exactly which one you picked.
-- **Test your local site.** Open `localhost:3000` (or any dev server) and check changes as you make them.
-- **One tab per agent.** Several agents can browse at the same time without getting in each other's way.
-- **Inside herdr or in a window.** Chrome runs hidden and you see it only in herdr. Click the window button when you want a normal browser window; it never pops up on its own. Your tabs stay open.
-- **Fits in.** Follows your herdr desktop theme and works in herdr desktop and the herdr terminal app.
-- **Private by default.** Uses its own Chrome profile, separate from your everyday browser, and only listens on your machine.
+### It's part of herdr
+
+Pick **Browser** from herdr desktop's + menu and it opens as a split beside your agent, on Google or a home page you choose. There's no extra window to manage. It follows your herdr theme, each agent gets its own tab, and Chrome stays hidden until you click the window button.
+
+### Your agent uses it in every project
+
+Run `install-agents` once and Claude Code, Codex, OpenCode and Pi open their previews here in every project. Ask "show me localhost:3000" and the page appears beside the agent. The agent can read the page, click buttons, fill in forms and take screenshots.
+
+### Your agent can debug what it sees
+
+`herdr-web-browser console` gives the agent the page's console output and errors with stack traces. `herdr-web-browser network` gives it every request with its status code, failures first. The agent can fix the code, reload and check again while you watch, with no DevTools.
+
+### You can show the agent what you mean
+
+One click sends the agent a screenshot. A shortcut or Chrome's right-click menu sends the page text or your selection. The agent can also ask you to click an element on the page and gets back exactly which one you picked.
+
+### You don't sign in again
+
+The cog in the view opens settings. Search and tick the sites you're signed in to in Chrome, and those logins come across. Only the sites you tick are copied, because every agent using the browser can use them.
+
+### Your own Chrome stays untouched
+
+It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing)) with its own profile, so your everyday browser, its windows and its logins are left alone. Chrome's control port only accepts connections from your machine.
 
 <p>
   <img src="docs/screenshots/plus-menu.png" alt="Browser in herdr desktop's + menu" width="360">
