@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "package-name": "herdr-web-browser",
+      "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "herdr-plugin.toml",
+        { "type": "json", "path": "extension/manifest.json", "jsonpath": "$.version" }
+      ]
+    }
+  }
+}

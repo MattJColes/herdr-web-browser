@@ -16,6 +16,8 @@ Pick **Browser** from herdr desktop's + menu and it opens as a split beside your
 
 Run `install-agents` once and Claude Code, Codex, OpenCode and Pi open their previews here in every project. Ask "show me localhost:3000" and the page appears beside the agent. The agent can read the page, click buttons, fill in forms and take screenshots.
 
+Your dev server's links work too. Ctrl-click a `localhost`, `127.0.0.1` or LAN address in any herdr terminal and it opens here, beside that pane, instead of in your everyday browser. Other links open as usual.
+
 ### Console and network debugging for agents
 
 `herdr-web-browser console` gives the agent the page's console output and errors with stack traces. `herdr-web-browser network` gives it every request with its status code, failures first. The agent can fix the code, reload and check again while you watch, with no DevTools.
@@ -42,6 +44,16 @@ It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.co
 - macOS or Linux
 
 ## Install
+
+From herdr's [plugin marketplace](https://herdr.dev/plugins/), in the herdr terminal app:
+
+```sh
+herdr plugin install MattJColes/herdr-web-browser   # builds it with cargo, so you need Rust
+```
+
+herdr puts the `herdr-web-browser` command on your PATH each time it starts. Then run `herdr-web-browser install-browser` and `herdr-web-browser install-agents` (both also appear as **Browser:** actions), and `herdr-web-browser install-desktop` if you use herdr desktop. They're explained below.
+
+Or from source:
 
 ```sh
 git clone https://github.com/MattJColes/herdr-web-browser
