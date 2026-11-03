@@ -51,7 +51,7 @@ fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sen
             "Page.startScreencast",
             json!({
                 "format": if size.jpeg { "jpeg" } else { "png" },
-                "quality": 85,
+                "quality": 90,
                 "maxWidth": size.max_frame.0,
                 "maxHeight": size.max_frame.1,
                 "everyNthFrame": 1,
