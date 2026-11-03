@@ -8,7 +8,9 @@ A web browser for [herdr](https://herdr.dev). It shows pages in a pane right nex
 
 - **Browse beside your agent.** A live page view sits in a herdr pane, with an address bar, back/forward/reload, and screenshot and window buttons. Click, scroll and type as normal.
 - **One click from the + menu.** In herdr desktop, **Browser** sits in the + menu next to your agents. It opens as a split beside the agent you were using, on your home page.
-- **Your agent can use it too.** Agents open pages, read text, click buttons, fill in forms and take screenshots, all with simple commands.
+- **Your agent can use it too, in every project.** One setup step teaches Claude Code, Codex, OpenCode and Pi to open previews here. Agents open pages, read text, click buttons, fill in forms and take screenshots.
+- **Agents can debug what they see.** Console output, errors with stack traces and failed requests, without DevTools.
+- **Your logins, if you want them.** Copy the sites you're signed in to in Google Chrome, picked from a searchable list.
 - **Send anything to your agent.** One click sends a screenshot. A shortcut or Chrome's right-click menu sends the page or the text you selected.
 - **Show the agent what you mean.** The agent can ask you to click an element on the page and gets back exactly which one you picked.
 - **Test your local site.** Open `localhost:3000` (or any dev server) and check changes as you make them.
@@ -36,7 +38,10 @@ git clone https://github.com/MattJColes/herdr-web-browser
 cd herdr-web-browser
 cargo build --release
 ./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin
+herdr-web-browser install-agents                     # agents use it for web previews in every project
 ```
+
+`install-agents` adds a Claude Code skill (`~/.claude/skills/herdr-web-browser/`) and a short section to the global instructions of Codex (`~/.codex/AGENTS.md`), OpenCode (`~/.config/opencode/AGENTS.md`) and Pi (`~/.pi/agent/AGENTS.md`), for whichever of them you have. Now "show me the page" or "open localhost:3000" opens this browser in any project. Run it again after updating; it replaces its own section and leaves the rest of the file alone.
 
 Then set it up for the herdr you use.
 
@@ -85,7 +90,7 @@ If the view is already open, running it again reuses it.
 
 Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself.
 
-To let your agent know about the browser, add this line to your project's `CLAUDE.md` or `AGENTS.md`:
+If you skipped `install-agents`, add this line to a project's `CLAUDE.md` or `AGENTS.md` instead:
 
 ```
 Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-help` for the commands.
@@ -99,12 +104,29 @@ Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-h
 | Address bar | Click it, type an address, press Enter. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
 | Camera | Send a screenshot to the agent |
 | Window | Switch between a hidden browser (shown only in herdr) and a normal Chrome window |
+| Cog | Settings: set up agents, and sign in with your Google Chrome logins (see below) |
 
 Hover over a button and its name shows in the address bar, which also shows messages such as "sent screenshot" for a few seconds.
 
 Keyboard shortcuts: `Ctrl-L` address bar, `Ctrl-B`/`Ctrl-F` back/forward, `Ctrl-R` reload, `Ctrl-N`/`Ctrl-P` next/previous tab (the agent beside the view uses the tab you pick), `Ctrl-G` send page, `Ctrl-S` send selection, `Ctrl-X` screenshot, `Ctrl-E` window mode, `Ctrl-Q` close the view (the browser keeps running).
 
 Inside Chrome itself, right-click to send a selection, page, link or screenshot to your agent.
+
+## Sign in with your Chrome logins
+
+The browser has its own profile, so it starts signed out of everything. To skip signing in again, click the **cog** in the view (or **Settings…** in the browser menu), search and tick the sites you want, and click **Import** twice. The browser restarts for a moment and your tabs come back.
+
+From a terminal:
+
+```sh
+herdr-web-browser import-logins --list           # sites you're signed in to in Chrome
+herdr-web-browser import-logins github.com vercel.com
+herdr-web-browser import-logins --all            # everything (think twice)
+```
+
+This copies cookies from Google Chrome's `Default` profile (`--profile "Profile 1"` for another). It works because the browser runs the same Chrome app, which encrypts cookies with one key per app, so nothing is decrypted along the way. It needs Google Chrome (not Chromium, Edge or Brave) and the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
+
+**Every agent that uses the browser can act as you on the sites you import.** Import only what you're happy to share.
 
 ## Which agent gets what you send
 
@@ -145,17 +167,21 @@ herdr-web-browser click 3
 herdr-web-browser type 2 "hello" --submit
 herdr-web-browser text                         # the page's text
 herdr-web-browser screenshot /tmp/page.png
+herdr-web-browser console                      # console output and errors, with stack traces
+herdr-web-browser network                      # requests and status codes, failures first
 herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you get it back
 ```
+
+`console` and `network` read what the browser's extension recorded since the page loaded; add `--clear` to start fresh before reproducing a bug.
 
 `herdr-web-browser agent-help` prints the full list. Add `--json` to any command for structured output.
 
 ## Privacy and safety
 
-- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-web-browser/`). Every agent that uses the browser can reach any site you sign in to there, so only sign in to what you're happy for agents to use.
+- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-web-browser/`). Every agent that uses the browser can reach any site you sign in to there, or import from Chrome, so only do that for sites you're happy for agents to use.
 - Chrome's control port only accepts connections from your own machine.
 - Web pages can't send messages to your agent. Only you can, through the view, the right-click menu or herdr.
-- Anything sent to an agent is labelled as web content, so the agent knows not to follow instructions written on the page.
+- Anything sent to an agent is labelled as web content, so the agent knows not to follow instructions written on the page. So is `console` output, which the page itself can write.
 
 ## Development
 
