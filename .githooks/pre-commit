@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Lint and test staged Rust changes before they're committed.
+# Enable once per clone: git config core.hooksPath .githooks
+set -euo pipefail
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+if ! grep -qE '\.rs$|^Cargo\.(toml|lock)$|^rustfmt\.toml$' <<<"$staged"; then
+  exit 0
+fi
+
+echo "pre-commit: cargo fmt --check"
+cargo fmt --check || { echo "pre-commit: run 'cargo fmt' and stage the result" >&2; exit 1; }
+echo "pre-commit: cargo clippy"
+cargo clippy --all-targets --quiet -- -D warnings
+# The unit tests take well under a second, so run them all rather than guess which changed.
+echo "pre-commit: cargo test"
+cargo test --quiet
