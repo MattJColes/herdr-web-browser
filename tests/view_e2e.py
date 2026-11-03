@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Click every live-view control through a real pty and check its effect.
 
-Runs `herdr-browser view` in a pseudo-terminal, sends SGR mouse clicks at each
+Runs `herdr-web-browser view` in a pseudo-terminal, sends SGR mouse clicks at each
 button's cell, and verifies the result with the CLI. Fake `hc` / `herdr-app`
 on PATH stand in for herdr desktop, so sends are logged instead of typed into
 a real agent. The browser it drives is the real one (headless, own state dir).
 
-    python3 -I tests/view_e2e.py [path/to/herdr-browser]
+    python3 -I tests/view_e2e.py [path/to/herdr-web-browser]
+    E2E_WINDOW=1 python3 -I tests/view_e2e.py   # also the window button (opens Chrome)
 """
 import fcntl
 import json
@@ -21,7 +22,7 @@ import termios
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "target/release/herdr-browser")
+BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "target/release/herdr-web-browser")
 COLS, ROWS = 100, 40
 OWNER = "t99"
 
@@ -107,6 +108,12 @@ def last_status():
     return hits[-3:]
 
 
+def last_status_text():
+    """Everything the view has drawn, escapes stripped."""
+    import re
+    return re.sub(rb"\x1b(\[[0-9;?<]*[a-zA-Z]|_G[^\x1b]*\x1b\\|\][^\x07]*\x07)", b"", bytes(screen)).decode("utf8", "replace")
+
+
 def click(col, row):
     os.write(fd, f"\x1b[<0;{col + 1};{row + 1}M".encode())
     os.write(fd, f"\x1b[<0;{col + 1};{row + 1}m".encode())
@@ -114,7 +121,6 @@ def click(col, row):
 
 
 pump(4)  # detection timeout, attach, first frames
-BOTTOM = ROWS - 1
 
 click(2, 0)
 check("back", url().startswith("data:text/html,<title>A"), url())
@@ -129,35 +135,45 @@ os.write(fd, b"data:text/html,<title>C</title>typed\r")
 pump(3)
 check("address bar", url().startswith("data:text/html,<title>C"), url())
 
+def key(b):
+    os.write(fd, b)
+    pump(2.5)
+
+
+# Header, right of the address bar: screenshot, window, settings, 4 columns each, then a gap.
+SHOT_COL, MODE_COL, SETTINGS_COL = COLS - 12, COLS - 8, COLS - 4
+
 cli("eval", "getSelection().selectAllChildren(document.body)")
 before = calls()
-click(17, BOTTOM)
-check("send page", "hc send t99 [herdr-browser] page" in calls()[len(before):], calls()[len(before):][-200:])
+key(b"\x07")  # ctrl+g
+check("send page", "hc send t99 [herdr-web-browser] page" in calls()[len(before):], calls()[len(before):][-200:])
 before = calls()
-click(21, BOTTOM)
-check("send selection", "hc send t99 [herdr-browser] selection" in calls()[len(before):])
+key(b"\x13")  # ctrl+s
+check("send selection", "hc send t99 [herdr-web-browser] selection" in calls()[len(before):])
 before = calls()
-click(25, BOTTOM)
-check("screenshot", "hc send t99 [herdr-browser] screenshot" in calls()[len(before):])
+click(SHOT_COL, 0)
+check("screenshot", "hc send t99 [herdr-web-browser] screenshot" in calls()[len(before):])
 
-tabs = cli("tabs")
+before = calls()
+click(SETTINGS_COL, 0)
+check("settings", "herdr-app do mod.open --name herdr-web-browser-settings" in calls()[len(before):] or "install-agents" in last_status_text(), calls()[len(before):][-200:])
+
 mine = state()["tabs"][OWNER]
-tab_text = f" {next(t['n'] for t in tabs if t['mine'])}/{len(tabs)} "
-next_col = 5 + len(tab_text) + 1
-click(next_col, BOTTOM)
-moved = state()["tabs"][OWNER]
-check("next tab", moved != mine, f"{len(tabs)} tabs")
-click(2, BOTTOM)
+key(b"\x0e")  # ctrl+n
+check("next tab", state()["tabs"][OWNER] != mine)
+key(b"\x10")  # ctrl+p
 check("previous tab", state()["tabs"][OWNER] == mine)
 
-click(29, BOTTOM)
-pump(6)
-check("mode switch", state()["mode"] == "headed", state().get("mode"))
-click(29, BOTTOM)
-pump(6)
-check("mode switch back", state()["mode"] == "headless", state().get("mode"))
+# Pops a real Chrome window up over whatever you're doing, so only on request.
+if os.environ.get("E2E_WINDOW"):
+    click(MODE_COL, 0)
+    pump(6)
+    check("mode switch", state()["mode"] == "headed", state().get("mode"))
+    click(MODE_COL, 0)
+    pump(6)
+    check("mode switch back", state()["mode"] == "headless", state().get("mode"))
 
-click(COLS - 3, BOTTOM)
+os.write(fd, b"\x11")  # ctrl+q
 pump(1)
 done, status = os.waitpid(pid, os.WNOHANG)
 check("close", done == pid)

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
-pub const PLUGIN_ID: &str = "herdr-browser";
+pub const PLUGIN_ID: &str = "herdr-web-browser";
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").expect("HOME is not set"))
@@ -36,7 +36,7 @@ pub fn config_dir() -> PathBuf {
     })
 }
 
-/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-browser`.
+/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-web-browser`.
 pub fn plugin_root() -> PathBuf {
     env_dir("HERDR_PLUGIN_ROOT").unwrap_or_else(|| {
         let exe = std::env::current_exe()
@@ -60,9 +60,12 @@ pub struct Config {
     pub cell_aspect: Option<f64>,
     /// Live view: "kitty" or "blocks"; detected when unset.
     pub view_renderer: Option<String>,
+    /// What a new Browser (herdr desktop's + menu) opens on.
+    pub home_page: Option<String>,
 }
 
 pub const DEFAULT_MAX_CHARS: usize = 20_000;
+pub const DEFAULT_HOME_PAGE: &str = "https://www.google.com";
 
 impl Config {
     pub fn load() -> R<Config> {
@@ -76,13 +79,16 @@ impl Config {
     pub fn max_chars(&self) -> usize {
         self.max_chars.unwrap_or(DEFAULT_MAX_CHARS)
     }
+    pub fn home_page(&self) -> &str {
+        self.home_page.as_deref().unwrap_or(DEFAULT_HOME_PAGE)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
-    #[default]
     Headed,
+    #[default]
     Headless,
 }
 

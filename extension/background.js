@@ -28,7 +28,7 @@ async function grab(kind, tab, info) {
 function badge(tabId, ok, error) {
   chrome.action.setBadgeBackgroundColor({ tabId, color: ok ? "#1a7f37" : "#cf222e" });
   chrome.action.setBadgeText({ tabId, text: ok ? "✓" : "✗" });
-  chrome.action.setTitle({ tabId, title: ok ? "Sent to herdr agent" : `herdr-browser: ${error}` });
+  chrome.action.setTitle({ tabId, title: ok ? "Sent to herdr agent" : `herdr-web-browser: ${error}` });
   setTimeout(() => chrome.action.setBadgeText({ tabId, text: "" }), 4000);
 }
 

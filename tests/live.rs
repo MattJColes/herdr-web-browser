@@ -3,7 +3,7 @@
 use std::process::Command;
 
 fn hb(state: &std::path::Path, args: &[&str]) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_herdr-browser"))
+    let out = Command::new(env!("CARGO_BIN_EXE_herdr-web-browser"))
         .args(args)
         .env("HERDR_PLUGIN_STATE_DIR", state)
         .env("HERDR_PLUGIN_ROOT", env!("CARGO_MANIFEST_DIR"))

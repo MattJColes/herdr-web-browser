@@ -38,6 +38,10 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
     if let Some(p) = &cfg.chrome_path {
         return if p.is_file() { Ok(p.clone()) } else { Err(format!("chrome_path {} does not exist", p.display()).into()) };
     }
+    // Its own app, so it can't take over the user's Chrome (see browser_install).
+    if let Some(p) = crate::browser_install::installed() {
+        return Ok(p);
+    }
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join("Applications");
@@ -100,7 +104,7 @@ fn install_native_host(profile: &Path) -> R<()> {
     fs::create_dir_all(&dir)?;
     let manifest = json!({
         "name": NATIVE_HOST,
-        "description": "herdr-browser bridge to herdr agents",
+        "description": "herdr-web-browser bridge to herdr agents",
         "path": wrapper,
         "type": "stdio",
         "allowed_origins": [format!("chrome-extension://{EXTENSION_ID}/")],
@@ -127,7 +131,10 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
         .args(["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"])
         // Lets us load our unpacked extension over CDP (branded Chrome ignores --load-extension).
         .arg("--enable-unsafe-extension-debugging")
-        .args(["--no-first-run", "--no-default-browser-check", "--hide-crash-restore-bubble"]);
+        .args(["--no-first-run", "--no-default-browser-check", "--hide-crash-restore-bubble"])
+        // With some profiles Chrome counts its headless windows as occluded after ~1s and
+        // stops painting them, which freezes the live view on its first frame.
+        .arg("--disable-backgrounding-occluded-windows");
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
@@ -153,7 +160,7 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     let ext = state::plugin_root().join("extension");
     let loaded = Cdp::connect(&url).and_then(|mut c| c.call("Extensions.loadUnpacked", json!({ "path": ext }), None));
     if let Err(e) = loaded {
-        eprintln!("herdr-browser: extension not loaded ({e}); in-browser send menus unavailable");
+        eprintln!("herdr-web-browser: extension not loaded ({e}); in-browser send menus unavailable");
     }
     if mode == Mode::Headed {
         present(&url, pid);
@@ -199,12 +206,25 @@ fn bring_to_front(pid: u32) {
 #[cfg(not(target_os = "macos"))]
 fn bring_to_front(_pid: u32) {}
 
-/// Running browser's endpoint, starting one in the last-used mode if needed.
+/// Running browser's endpoint, starting a headless one if needed: a window only
+/// appears when the user asks for one (`mode headed`, the Window button).
 pub fn ensure(cfg: &Config) -> R<String> {
     match endpoint() {
         Some(u) => Ok(u),
-        None => launch(state::load()?.mode.unwrap_or_default(), cfg),
+        None if restarting() => Err("the browser is restarting".into()),
+        None => launch(Mode::Headless, cfg),
     }
+}
+
+/// Held while `restart` has the browser stopped, so live views (which reconnect every
+/// second) don't start another one mid-swap. Ignored after a few minutes, should a
+/// restart die holding it.
+fn restart_lock() -> PathBuf {
+    state::state_dir().join("restarting")
+}
+
+fn restarting() -> bool {
+    fs::metadata(restart_lock()).and_then(|m| m.modified()).is_ok_and(|t| t.elapsed().unwrap_or_default() < Duration::from_secs(600))
 }
 
 /// Chrome removes the profile's SingletonLock symlink on clean exit.
@@ -230,10 +250,25 @@ pub fn stop() -> R<bool> {
 
 /// Relaunch in `mode`, reopening every tab and keeping pane ownership.
 pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
-    let Some(url) = endpoint() else {
-        state::update(|s| s.mode = Some(mode))?;
+    if endpoint().is_none() {
+        launch(mode, cfg)?;
         return Ok(());
-    };
+    }
+    restart(mode, cfg, || Ok(()))
+}
+
+/// Stop the browser, run `between` (e.g. to change its profile), then relaunch in `mode`
+/// with every tab reopened and pane ownership kept. Not running: just `between`.
+pub fn restart(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> R<()> {
+    fs::create_dir_all(state::state_dir())?;
+    fs::write(restart_lock(), "")?;
+    let result = restart_locked(mode, cfg, between);
+    let _ = fs::remove_file(restart_lock());
+    result
+}
+
+fn restart_locked(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> R<()> {
+    let Some(url) = endpoint() else { return between() };
     let mut c = Cdp::connect(&url)?;
     let owners = state::load()?.tabs;
     let tabs: Vec<(Option<String>, String)> = page::page_targets(&mut c)?
@@ -242,6 +277,7 @@ pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
         .collect();
     drop(c);
     stop()?;
+    let changed = between();
     let url = launch(mode, cfg)?;
     let mut c = Cdp::connect(&url)?;
     // Chrome registers its startup tab shortly after the port opens; wait so it
@@ -267,7 +303,7 @@ pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
         }
     }
     state::update(|s| s.tabs = map)?;
-    Ok(())
+    changed
 }
 
 #[cfg(test)]
