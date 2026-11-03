@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
-pub const PLUGIN_ID: &str = "herdr-browser";
+pub const PLUGIN_ID: &str = "herdr-web-browser";
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").expect("HOME is not set"))
@@ -36,7 +36,7 @@ pub fn config_dir() -> PathBuf {
     })
 }
 
-/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-browser`.
+/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-web-browser`.
 pub fn plugin_root() -> PathBuf {
     env_dir("HERDR_PLUGIN_ROOT").unwrap_or_else(|| {
         let exe = std::env::current_exe()

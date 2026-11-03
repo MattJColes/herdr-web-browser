@@ -100,7 +100,7 @@ fn install_native_host(profile: &Path) -> R<()> {
     fs::create_dir_all(&dir)?;
     let manifest = json!({
         "name": NATIVE_HOST,
-        "description": "herdr-browser bridge to herdr agents",
+        "description": "herdr-web-browser bridge to herdr agents",
         "path": wrapper,
         "type": "stdio",
         "allowed_origins": [format!("chrome-extension://{EXTENSION_ID}/")],
@@ -153,7 +153,7 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     let ext = state::plugin_root().join("extension");
     let loaded = Cdp::connect(&url).and_then(|mut c| c.call("Extensions.loadUnpacked", json!({ "path": ext }), None));
     if let Err(e) = loaded {
-        eprintln!("herdr-browser: extension not loaded ({e}); in-browser send menus unavailable");
+        eprintln!("herdr-web-browser: extension not loaded ({e}); in-browser send menus unavailable");
     }
     if mode == Mode::Headed {
         present(&url, pid);

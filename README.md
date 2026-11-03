@@ -28,10 +28,10 @@ A web browser for [herdr](https://herdr.dev). It shows pages in a pane right nex
 ## Install
 
 ```sh
-git clone https://github.com/MattJColes/herdr-browser
-cd herdr-browser
+git clone https://github.com/MattJColes/herdr-web-browser
+cd herdr-web-browser
 cargo build --release
-./target/release/herdr-browser install-cli       # puts `herdr-browser` in ~/.local/bin
+./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin
 ```
 
 Then set it up for the herdr you use.
@@ -39,13 +39,13 @@ Then set it up for the herdr you use.
 **herdr desktop**
 
 ```sh
-herdr-browser install-desktop
+herdr-web-browser install-desktop
 ```
 
 This adds the browser's menu, agent picker and icon to herdr desktop. To open the menu with a shortcut, add this to `~/.config/herdr-app/keys.json` under `"global"`:
 
 ```json
-"cmd-shift-b": "mod.open:herdr-browser"
+"cmd-shift-b": "mod.open:herdr-web-browser"
 ```
 
 **herdr (terminal app)**
@@ -60,13 +60,13 @@ This adds the browser's actions, status pane and agent picker to herdr.
 
 The easiest way is to ask your agent:
 
-> Open localhost:3000 in herdr-browser so I can see it.
+> Open localhost:3000 in herdr-web-browser so I can see it.
 
-The agent runs `herdr-browser open localhost:3000 --show`, which loads the page and opens the view beside it. You can also do it yourself:
+The agent runs `herdr-web-browser open localhost:3000 --show`, which loads the page and opens the view beside it. You can also do it yourself:
 
 | Where | How |
 |---|---|
-| Any terminal in herdr | `herdr-browser open <address> --show` |
+| Any terminal in herdr | `herdr-web-browser open <address> --show` |
 | herdr desktop | Press your menu shortcut (above) and choose **Open live view** |
 | herdr (terminal app) | Run the **Browser: open** action |
 
@@ -75,7 +75,7 @@ If the view is already open, running it again reuses it.
 ## Test a local website
 
 1. Start your dev server as usual (for example `npm run dev`).
-2. Ask your agent to open it, or run `herdr-browser open localhost:3000 --show`.
+2. Ask your agent to open it, or run `herdr-web-browser open localhost:3000 --show`.
 3. Edit your code, then press **Reload** in the toolbar. You can also ask the agent to check the page for you.
 
 Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself.
@@ -83,7 +83,7 @@ Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x
 To let your agent know about the browser, add this line to your project's `CLAUDE.md` or `AGENTS.md`:
 
 ```
-Use herdr-browser to view and test web pages. Run `herdr-browser agent-help` for the commands.
+Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-help` for the commands.
 ```
 
 ## Using the view
@@ -113,7 +113,7 @@ Inside Chrome itself, right-click to send a selection, page, link or screenshot 
 
 ## Settings
 
-Optional. Put them in `~/.config/herdr/plugins/config/herdr-browser/config.toml`:
+Optional. Put them in `~/.config/herdr/plugins/config/herdr-web-browser/config.toml`:
 
 ```toml
 default_agent = "reviewer"    # agent to send to when there's a choice
@@ -128,27 +128,27 @@ cell_aspect = 2.6             # if the page looks stretched
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font).
 - **"No Chrome found".** Set `chrome_path`.
-- **Want a real window?** Click **Window**, or run `herdr-browser mode headed`.
+- **Want a real window?** Click **Window**, or run `herdr-web-browser mode headed`.
 
 ## For agents
 
-Agents use the `herdr-browser` command. Each agent gets its own tab, and the browser starts by itself when needed.
+Agents use the `herdr-web-browser` command. Each agent gets its own tab, and the browser starts by itself when needed.
 
 ```sh
-herdr-browser open localhost:3000 --show   # load a page and show it to the user
-herdr-browser snapshot                     # list buttons and links: [3] button "Sign in"
-herdr-browser click 3
-herdr-browser type 2 "hello" --submit
-herdr-browser text                         # the page's text
-herdr-browser screenshot /tmp/page.png
-herdr-browser pick --prompt "Which row?"   # the user clicks something; you get it back
+herdr-web-browser open localhost:3000 --show   # load a page and show it to the user
+herdr-web-browser snapshot                     # list buttons and links: [3] button "Sign in"
+herdr-web-browser click 3
+herdr-web-browser type 2 "hello" --submit
+herdr-web-browser text                         # the page's text
+herdr-web-browser screenshot /tmp/page.png
+herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you get it back
 ```
 
-`herdr-browser agent-help` prints the full list. Add `--json` to any command for structured output.
+`herdr-web-browser agent-help` prints the full list. Add `--json` to any command for structured output.
 
 ## Privacy and safety
 
-- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-browser/`). Every agent that uses the browser can reach any site you sign in to there, so only sign in to what you're happy for agents to use.
+- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-web-browser/`). Every agent that uses the browser can reach any site you sign in to there, so only sign in to what you're happy for agents to use.
 - Chrome's control port only accepts connections from your own machine.
 - Web pages can't send messages to your agent. Only you can, through the view, the right-click menu or herdr.
 - Anything sent to an agent is labelled as web content, so the agent knows not to follow instructions written on the page.

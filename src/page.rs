@@ -88,7 +88,7 @@ pub fn resolve(cfg: &Config, tab: Option<usize>, create: bool) -> R<Page> {
     let mut c = Cdp::connect(&url)?;
     let tabs = page_targets(&mut c)?;
     let chosen = if let Some(n) = tab {
-        tabs.get(n.wrapping_sub(1)).cloned().ok_or_else(|| format!("no tab {n}; run `herdr-browser tabs`"))?
+        tabs.get(n.wrapping_sub(1)).cloned().ok_or_else(|| format!("no tab {n}; run `herdr-web-browser tabs`"))?
     } else if let Some(pane) = caller_pane() {
         let owned = state::load()?.tabs.get(&pane).cloned();
         match owned.and_then(|id| tabs.iter().find(|t| t.id == id).cloned()) {
@@ -307,7 +307,7 @@ impl Page {
 
     pub fn pick(&mut self, prompt: &str, timeout: Duration) -> R<Value> {
         if state::load()?.mode == Some(state::Mode::Headless) {
-            return Err("pick needs a visible browser: run `herdr-browser mode headed`".into());
+            return Err("pick needs a visible browser: run `herdr-web-browser mode headed`".into());
         }
         self.activate()?;
         let prelude = format!(

@@ -246,7 +246,7 @@ impl Drop for Term {
 }
 
 /// Chrome colors. On herdr desktop they come from its live theme (synced by the
-/// `herdr-browser-theme` mod), so the view matches the panes around it.
+/// `herdr-web-browser-theme` mod), so the view matches the panes around it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Palette {
     bar: Rgb,
@@ -570,7 +570,7 @@ impl View {
         self.page = None;
     }
 
-    /// The owner's mapping can change underneath us (`herdr-browser tab n`).
+    /// The owner's mapping can change underneath us (`herdr-web-browser tab n`).
     fn owner_moved(&self) -> bool {
         let (Some(o), Some(p)) = (&self.owner, &self.page) else { return false };
         state::load().ok().and_then(|s| s.tabs.get(o).cloned()).is_some_and(|id| id != p.tab.id)
@@ -1146,7 +1146,7 @@ pub fn run(cfg: Config) -> R<()> {
 fn event_loop(v: &mut View, rx: &Receiver<Msg>) -> R<()> {
     if std::env::var_os("HC_TERMINAL_ID").is_some() {
         // Ask herdr desktop for its theme; the mod writes theme.json, picked up below.
-        std::thread::spawn(|| drop(crate::host::run("herdr-app", &["do", "mod.open", "--name", "herdr-browser-theme"])));
+        std::thread::spawn(|| drop(crate::host::run("herdr-app", &["do", "mod.open", "--name", "herdr-web-browser-theme"])));
     }
     let mut last_tick = Instant::now() - Duration::from_secs(10);
     let mut last_gc = Instant::now();

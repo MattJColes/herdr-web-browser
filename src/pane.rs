@@ -61,7 +61,7 @@ fn status_lines(msg: &str) -> Vec<String> {
     match chrome::endpoint().and_then(|u| Cdp::connect(&u).ok()) {
         Some(mut c) => {
             let port = chrome::port().map(|p| p.to_string()).unwrap_or_default();
-            lines.push(format!("herdr-browser  ● running {mode_s}  127.0.0.1:{port}   target: {target}"));
+            lines.push(format!("herdr-web-browser  ● running {mode_s}  127.0.0.1:{port}   target: {target}"));
             lines.push(String::new());
             for (i, t) in page::page_targets(&mut c).unwrap_or_default().iter().enumerate() {
                 let owner = st.tabs.iter().find(|(_, id)| **id == t.id).map(|(p, _)| p.as_str()).unwrap_or("-");
@@ -69,7 +69,7 @@ fn status_lines(msg: &str) -> Vec<String> {
             }
         }
         None => {
-            lines.push(format!("herdr-browser  ○ stopped (next start: {mode_s})   target: {target}"));
+            lines.push(format!("herdr-web-browser  ○ stopped (next start: {mode_s})   target: {target}"));
             lines.push(String::new());
             lines.push("  [o] start the browser".into());
         }

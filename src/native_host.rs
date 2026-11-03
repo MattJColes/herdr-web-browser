@@ -92,7 +92,7 @@ pub fn run() -> R<()> {
         let reply = match Config::load().and_then(|cfg| handle(msg, &cfg)) {
             Ok(agent) => json!({ "ok": true, "agent": agent }),
             Err(e) => {
-                crate::host::notify(crate::host::host(), "herdr-browser: send failed", &e.to_string());
+                crate::host::notify(crate::host::host(), "herdr-web-browser: send failed", &e.to_string());
                 json!({ "ok": false, "error": e.to_string() })
             }
         };

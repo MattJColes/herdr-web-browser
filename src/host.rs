@@ -192,17 +192,17 @@ pub fn notify(host: Host, title: &str, body: &str) {
             // The CLI can't post desktop toasts; the toast mod picks this up and posts it.
             let stashed = state::update(|s| s.toast = Some([title.to_string(), body.to_string()]));
             if stashed.is_ok() {
-                drop(run("herdr-app", &["do", "mod.open", "--name", "herdr-browser-toast"]));
+                drop(run("herdr-app", &["do", "mod.open", "--name", "herdr-web-browser-toast"]));
             }
         }
     }
 }
 
-/// Ask the host to show the agent picker; it reports back through `herdr-browser picked`.
+/// Ask the host to show the agent picker; it reports back through `herdr-web-browser picked`.
 pub fn open_picker(host: Host) -> R<()> {
     match host {
         Host::Tui => herdr(&["plugin", "pane", "open", "--plugin", state::PLUGIN_ID, "--entrypoint", "picker"]).map(drop),
-        Host::Desktop => run("herdr-app", &["do", "mod.open", "--name", "herdr-browser-picker"]).map(drop),
+        Host::Desktop => run("herdr-app", &["do", "mod.open", "--name", "herdr-web-browser-picker"]).map(drop),
     }
 }
 
@@ -260,7 +260,7 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
 fn live_view_for(owner: &str) -> Option<String> {
     let v = run("hc", &["ls", "--json"]).ok()?;
     // `hc ls` names the program; only `hc get` has the command line with the owner.
-    v["terminals"].as_array()?.iter().filter(|t| t["state"] == "live" && t["agent"] == "herdr-browser").find_map(|t| {
+    v["terminals"].as_array()?.iter().filter(|t| t["state"] == "live" && t["agent"] == "herdr-web-browser").find_map(|t| {
         let addr = s(t, "address");
         let full = run("hc", &["get", &addr, "--json"]).ok()?;
         let argv: Vec<&str> = full["argv"].as_array()?.iter().filter_map(Value::as_str).collect();

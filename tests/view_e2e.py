@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Click every live-view control through a real pty and check its effect.
 
-Runs `herdr-browser view` in a pseudo-terminal, sends SGR mouse clicks at each
+Runs `herdr-web-browser view` in a pseudo-terminal, sends SGR mouse clicks at each
 button's cell, and verifies the result with the CLI. Fake `hc` / `herdr-app`
 on PATH stand in for herdr desktop, so sends are logged instead of typed into
 a real agent. The browser it drives is the real one (headless, own state dir).
 
-    python3 -I tests/view_e2e.py [path/to/herdr-browser]
+    python3 -I tests/view_e2e.py [path/to/herdr-web-browser]
 """
 import fcntl
 import json
@@ -21,7 +21,7 @@ import termios
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "target/release/herdr-browser")
+BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "target/release/herdr-web-browser")
 COLS, ROWS = 100, 40
 OWNER = "t99"
 
@@ -132,13 +132,13 @@ check("address bar", url().startswith("data:text/html,<title>C"), url())
 cli("eval", "getSelection().selectAllChildren(document.body)")
 before = calls()
 click(17, BOTTOM)
-check("send page", "hc send t99 [herdr-browser] page" in calls()[len(before):], calls()[len(before):][-200:])
+check("send page", "hc send t99 [herdr-web-browser] page" in calls()[len(before):], calls()[len(before):][-200:])
 before = calls()
 click(21, BOTTOM)
-check("send selection", "hc send t99 [herdr-browser] selection" in calls()[len(before):])
+check("send selection", "hc send t99 [herdr-web-browser] selection" in calls()[len(before):])
 before = calls()
 click(25, BOTTOM)
-check("screenshot", "hc send t99 [herdr-browser] screenshot" in calls()[len(before):])
+check("screenshot", "hc send t99 [herdr-web-browser] screenshot" in calls()[len(before):])
 
 tabs = cli("tabs")
 mine = state()["tabs"][OWNER]

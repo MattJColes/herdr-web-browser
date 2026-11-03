@@ -1,5 +1,5 @@
 // @ts-check
-// herdr-browser menu (mod.open:herdr-browser): acts for the agent that had focus.
+// herdr-web-browser menu (mod.open:herdr-web-browser): acts for the agent that had focus.
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { exec, agents, focused, props, closeOverlay, notify, theme } from "herdr";
@@ -21,7 +21,7 @@ export default class Browser extends View {
     cx.spawn(async (_cx) => {
       const r = await exec(BIN, args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
       const out = (r.code === 0 ? r.stdout : r.stderr).trim().slice(0, 240);
-      notify({ title: "herdr-browser", body: out || label, level: r.code === 0 ? "success" : "error" });
+      notify({ title: "herdr-web-browser", body: out || label, level: r.code === 0 ? "success" : "error" });
       closeOverlay(props().overlay);
     });
   }

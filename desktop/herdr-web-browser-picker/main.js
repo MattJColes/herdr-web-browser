@@ -1,5 +1,5 @@
 // @ts-check
-// Opened by herdr-browser when a send has no obvious target; the choice becomes sticky.
+// Opened by herdr-web-browser when a send has no obvious target; the choice becomes sticky.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, agents, props, closeOverlay, theme } from "herdr";
