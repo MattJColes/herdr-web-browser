@@ -127,7 +127,7 @@ herdr-web-browser import-logins github.com vercel.com
 herdr-web-browser import-logins --all            # everything (think twice)
 ```
 
-This copies cookies from Google Chrome's `Default` profile (`--profile "Profile 1"` for another). Chrome encrypts them with a key from your keychain, so they're decrypted with that key and handed to the browser, which stores them its own way. Nothing is written to disk in between. It reads Google Chrome only (not Chromium, Edge or Brave) and uses the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
+This copies cookies from the Chrome profile you used last; the dialog lets you pick another, and so does `--profile "Profile 1"` (`--profiles` lists them). Chrome encrypts them with a key from your keychain, so they're decrypted with that key and handed to the browser, which stores them its own way. Nothing is written to disk in between. It reads Google Chrome only (not Chromium, Edge or Brave) and uses the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
 
 **Every agent that uses the browser can act as you on the sites you import.** Import only what you're happy to share.
 

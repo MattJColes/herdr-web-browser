@@ -151,9 +151,12 @@ enum Cmd {
         /// List Chrome's sites and cookie counts instead.
         #[arg(long)]
         list: bool,
-        /// Chrome profile: "Default", "Profile 1", ... or a path to a profile folder.
-        #[arg(long, default_value = "Default")]
-        profile: String,
+        /// List Chrome's profiles (folder and name), the last used first.
+        #[arg(long)]
+        profiles: bool,
+        /// Chrome profile folder ("Default", "Profile 1", ...) or a path to one; default: the last used.
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// Live view of this pane's tab (Kitty graphics terminal; herdr desktop).
     View {
@@ -528,7 +531,14 @@ fn run(cli: Cli) -> R<()> {
             let msg = install_desktop()?;
             print(j, msg.clone(), json!({ "message": msg }));
         }
-        Cmd::ImportLogins { sites, all, list, profile } => {
+        Cmd::ImportLogins { sites, all, list, profiles, profile } => {
+            if profiles {
+                let rows = logins::profiles()?;
+                let text = rows.iter().map(|(d, n)| format!("{d}: {n}")).collect::<Vec<_>>().join("\n");
+                print(j, text, json!(rows.iter().map(|(d, n)| json!({ "dir": d, "name": n })).collect::<Vec<_>>()));
+                return Ok(());
+            }
+            let profile = profile.unwrap_or_else(logins::default_profile);
             if list {
                 let rows = logins::sites(&profile)?;
                 let text = rows.iter().map(|(s, n)| format!("{s} ({n})")).collect::<Vec<_>>().join("\n");

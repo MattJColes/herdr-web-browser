@@ -11,6 +11,8 @@ export default class Settings extends View {
   init(_props, cx) {
     this.sites = undefined; // undefined: loading; [{ site, cookies }] once read
     this.error = "";
+    this.profiles = []; // [{ dir, name }], Chrome's last used first
+    this.profile = null;
     this.picked = new Set();
     this.query = "";
     this.confirming = false;
@@ -21,7 +23,7 @@ export default class Settings extends View {
       this.confirming = false;
       cx.notify();
     });
-    this.searchFocused = true;
+    this.searchFocused = false;
     this.search.on("focus", (_e, cx) => { this.searchFocused = true; cx.notify(); });
     this.search.on("blur", (_e, cx) => { this.searchFocused = false; cx.notify(); });
     // Like herdr's own dialogs: focus now, and again once the overlay has settled.
@@ -30,9 +32,28 @@ export default class Settings extends View {
     // The dialog only gets keys when its root tracks a focus handle (as herdr's own dialogs do).
     this.handle = cx.focus_handle();
     cx.spawn(async (cx) => {
-      const r = await exec(BIN, ["--json", "import-logins", "--list"]).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
+      const r = await this.run(["--json", "import-logins", "--profiles"]);
+      if (r.code === 0) this.profiles = JSON.parse(r.stdout);
+      this.load(this.profiles[0]?.dir ?? null, cx);
+    });
+  }
+
+  run(args) {
+    return exec(BIN, args).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
+  }
+
+  /** Read the sites of Chrome profile `dir` (null: whatever the command picks). */
+  load(dir, cx) {
+    this.profile = dir;
+    this.sites = undefined;
+    this.error = "";
+    this.picked.clear();
+    this.confirming = false;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = await this.run(["--json", "import-logins", "--list", ...(dir ? ["--profile", dir] : [])]);
       if (r.code === 0) this.sites = JSON.parse(r.stdout);
-      else this.error = r.stderr.trim() || "Couldn't read Google Chrome's sign-ins";
+      else this.error = r.stderr.replace(/^herdr-web-browser: /, "").trim() || "Couldn't read Google Chrome's sign-ins";
       cx.notify();
     });
   }
@@ -77,7 +98,8 @@ export default class Settings extends View {
       return;
     }
     const all = this.sites && this.picked.size === this.sites.length;
-    this.act("Importing sign-ins", ["import-logins", ...(all ? ["--all"] : [...this.picked])], cx);
+    const profile = this.profile ? ["--profile", this.profile] : [];
+    this.act("Importing sign-ins", ["import-logins", ...profile, ...(all ? ["--all"] : [...this.picked])], cx);
   }
 
   button(t, id, label, onClick, enabled = true, strong = false) {
@@ -102,11 +124,21 @@ export default class Settings extends View {
     const shown = this.shown();
     const n = this.picked.size;
     const allShown = shown.length > 0 && shown.every((s) => this.picked.has(s.site));
-    const list = this.sites === undefined
-      ? div().px(10).text_color(t.dim).child(this.error || "Reading Google Chrome's sign-ins…")
-      : v_flex().flex_1().min_h(0).overflow_y_scrollbar().children(shown.map((s) => this.siteRow(t, s)))
-        .when(shown.length === 0, (el) => el.child(div().px(10).py(6).text_color(t.dim).child("No matching sites")));
-    return v_flex().id("root").track_focus(this.handle).size_full().bg(t.popover).p(14).gap(10).text_size(13).text_color(t.foreground)
+    const empty = this.sites?.length === 0 ? "No cookies in this Chrome profile" : "No matching sites";
+    const list = this.error
+      ? div().px(10).text_color(t.blocked).child(this.error)
+      : this.sites === undefined
+        ? div().px(10).text_color(t.dim).child("Reading Google Chrome's sign-ins…")
+        : v_flex().flex_1().min_h(0).overflow_y_scrollbar().children(shown.map((s) => this.siteRow(t, s)))
+          .when(shown.length === 0, (el) => el.child(div().px(10).py(6).text_color(t.dim).child(empty)));
+    // One chip per Chrome profile, when there's a choice.
+    const profiles = h_flex().gap(6).flex_wrap().items_center()
+      .child(div().text_color(t.muted).child("Chrome profile:"))
+      .children(this.profiles.map((p) => div().id(`profile-${p.dir}`).px(10).py(3).rounded(12).cursor_pointer()
+        .bg(p.dir === this.profile ? t.accent : t.hover).text_color(p.dir === this.profile ? t.background : t.foreground)
+        .on_click((_e, cx) => { if (p.dir !== this.profile) this.load(p.dir, cx); })
+        .child(p.name)));
+    return v_flex().id("hb-settings").track_focus(this.handle).size_full().bg(t.popover).p(14).gap(10).text_size(13).text_color(t.foreground)
       .child(div().text_size(15).child("Browser settings"))
       .child(h_flex().gap(10).items_center()
         .child(div().flex_1().text_color(t.muted).child("Teach Claude Code, Codex, OpenCode and Pi to open web pages here."))
@@ -114,6 +146,7 @@ export default class Settings extends View {
       .child(div().h(1).bg(t.border))
       .child(div().child("Sign in with your Google Chrome logins"))
       .child(div().text_color(t.muted).child("Tick the sites to copy from Chrome. Every agent using this browser can then use them as you, so pick only what you're happy to share."))
+      .when(this.profiles.length > 1, (el) => el.child(profiles))
       .child(Input.new(this.search).h(30).px(10).items_center().rounded(6).border(1).border_color(this.searchFocused ? t.accent : t.input).bg(t.background).text_color(t.foreground))
       .child(h_flex().gap(10).items_center().text_color(t.muted)
         .child(this.button(t, "all", allShown ? "Untick shown" : "Tick shown", (cx) => this.toggleShown(cx), shown.length > 0))

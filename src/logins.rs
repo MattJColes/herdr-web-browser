@@ -19,16 +19,48 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 /// Seconds between 1601-01-01 (Chrome's epoch) and 1970-01-01.
 const WINDOWS_TO_UNIX_SECS: i64 = 11_644_473_600;
 
-/// Google Chrome's cookie database for `profile`: a profile folder name ("Default",
-/// "Profile 1", ...) in Chrome's usual place, or a path to a profile folder.
-fn chrome_cookies(profile: &str) -> R<PathBuf> {
+/// Google Chrome's own data folder (not Chrome for Testing's).
+fn chrome_dir() -> R<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
-    let base = if cfg!(target_os = "macos") { home.join("Library/Application Support/Google/Chrome") } else { home.join(".config/google-chrome") };
-    let db = base.join(profile).join("Cookies"); // an absolute `profile` replaces `base`
-    if !db.is_file() {
-        return Err(format!("no Google Chrome cookies at {}", db.display()).into());
+    Ok(if cfg!(target_os = "macos") { home.join("Library/Application Support/Google/Chrome") } else { home.join(".config/google-chrome") })
+}
+
+/// Chrome's profiles as (folder, name) from its `Local State`, the last used first.
+pub fn profiles() -> R<Vec<(String, String)>> {
+    let path = chrome_dir()?.join("Local State");
+    let raw = std::fs::read(&path).map_err(|e| format!("can't read {}: {e}", path.display()))?;
+    Ok(parse_profiles(&serde_json::from_slice(&raw)?))
+}
+
+fn parse_profiles(st: &Value) -> Vec<(String, String)> {
+    let last = st["profile"]["last_used"].as_str().unwrap_or("Default");
+    let mut out: Vec<(String, String)> = st["profile"]["info_cache"]
+        .as_object()
+        .map(|m| m.iter().map(|(dir, v)| (dir.clone(), v["name"].as_str().unwrap_or(dir).to_string())).collect())
+        .unwrap_or_default();
+    out.sort_by_key(|(dir, _)| dir != last);
+    if out.is_empty() {
+        out.push(("Default".into(), "Default".into()));
     }
-    Ok(db)
+    out
+}
+
+/// The profile to read when none is named: the one Chrome used last.
+pub fn default_profile() -> String {
+    profiles().ok().and_then(|p| p.into_iter().next()).map_or_else(|| "Default".into(), |(dir, _)| dir)
+}
+
+/// Google Chrome's cookie database for `profile`: a profile folder name ("Default",
+/// "Profile 1", ...) or a path to a profile folder. Newer Chrome keeps it under
+/// `Network/`; with both present, the one written last is the live one.
+fn chrome_cookies(profile: &str) -> R<PathBuf> {
+    let dir = chrome_dir()?.join(profile); // an absolute `profile` replaces Chrome's folder
+    let modified = |p: &PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    [dir.join("Network/Cookies"), dir.join("Cookies")]
+        .into_iter()
+        .filter(|p| p.is_file())
+        .max_by_key(modified)
+        .ok_or_else(|| format!("no Google Chrome cookies in {}", dir.display()).into())
 }
 
 /// A copy, so Chrome can keep its own database open while we read.
@@ -231,6 +263,14 @@ mod tests {
         let enc = [b"v10", &buf[..n]].concat();
         assert_eq!(decrypt(&enc, &key, true).unwrap(), "secret123");
         assert!(decrypt(&enc, &[0u8; 16], true).is_err());
+    }
+
+    #[test]
+    fn profiles_list_the_last_used_first() {
+        let st = json!({ "profile": { "last_used": "Profile 2", "info_cache": {
+            "Default": { "name": "Personal" }, "Profile 2": { "name": "Work" } } } });
+        assert_eq!(parse_profiles(&st), [("Profile 2".to_string(), "Work".to_string()), ("Default".into(), "Personal".into())]);
+        assert_eq!(parse_profiles(&json!({})), [("Default".to_string(), "Default".to_string())]);
     }
 
     #[test]
