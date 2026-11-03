@@ -13,7 +13,7 @@ cbc = "0.1"
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.29"
 libc = "0.2"
-pbkdf2 = "0.12"
+pbkdf2 = "0.13"
 png = "0.17"
 resvg = { version = "0.45", default-features = false }
 serde = { version = "1", features = ["derive"] }
