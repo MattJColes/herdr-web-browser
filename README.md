@@ -27,7 +27,7 @@ A web browser for [herdr](https://herdr.dev). It shows pages in a pane right nex
 ## What you need
 
 - herdr desktop, or herdr 0.9 or newer
-- Google Chrome, Chromium, Microsoft Edge or Brave
+- macOS (Apple silicon or Intel) or Linux x86-64 for the browser it downloads; elsewhere, Google Chrome, Chromium, Microsoft Edge or Brave
 - Rust, to build it (`cargo`)
 - macOS or Linux
 
@@ -38,8 +38,11 @@ git clone https://github.com/MattJColes/herdr-web-browser
 cd herdr-web-browser
 cargo build --release
 ./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin
+herdr-web-browser install-browser                    # downloads Chrome for Testing (~200 MB) for it to use
 herdr-web-browser install-agents                     # agents use it for web previews in every project
 ```
+
+`install-browser` gives herdr-web-browser its own copy of Chrome: Google's [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing), a separate app built for automation. Without it, the browser borrows your installed Chrome, and on macOS a hidden Chrome takes over the Chrome app, so clicking Chrome in the Dock does nothing. Run it again to update. While the browser runs, "Google Chrome for Testing" shows in the Dock.
 
 `install-agents` adds a Claude Code skill (`~/.claude/skills/herdr-web-browser/`) and a short section to the global instructions of Codex (`~/.codex/AGENTS.md`), OpenCode (`~/.config/opencode/AGENTS.md`) and Pi (`~/.pi/agent/AGENTS.md`), for whichever of them you have. Now "show me the page" or "open localhost:3000" opens this browser in any project. Run it again after updating; it replaces its own section and leaves the rest of the file alone.
 
@@ -114,7 +117,7 @@ Inside Chrome itself, right-click to send a selection, page, link or screenshot 
 
 ## Sign in with your Chrome logins
 
-The browser has its own profile, so it starts signed out of everything. To skip signing in again, click the **cog** in the view (or **Settings…** in the browser menu), search and tick the sites you want, and click **Import** twice. The browser restarts for a moment and your tabs come back.
+The browser has its own profile, so it starts signed out of everything. To skip signing in again, click the **cog** in the view (or **Settings…** in the browser menu), search and tick the sites you want, and click **Import** twice. The first time, macOS asks whether herdr-web-browser may use "Chrome Safe Storage" from your keychain: that's Chrome's cookie key, and you need to allow it.
 
 From a terminal:
 
@@ -124,7 +127,7 @@ herdr-web-browser import-logins github.com vercel.com
 herdr-web-browser import-logins --all            # everything (think twice)
 ```
 
-This copies cookies from Google Chrome's `Default` profile (`--profile "Profile 1"` for another). It works because the browser runs the same Chrome app, which encrypts cookies with one key per app, so nothing is decrypted along the way. It needs Google Chrome (not Chromium, Edge or Brave) and the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
+This copies cookies from Google Chrome's `Default` profile (`--profile "Profile 1"` for another). Chrome encrypts them with a key from your keychain, so they're decrypted with that key and handed to the browser, which stores them its own way. Nothing is written to disk in between. It reads Google Chrome only (not Chromium, Edge or Brave) and uses the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
 
 **Every agent that uses the browser can act as you on the sites you import.** Import only what you're happy to share.
 
@@ -142,7 +145,7 @@ Optional. Put them in `~/.config/herdr/plugins/config/herdr-web-browser/config.t
 
 ```toml
 default_agent = "reviewer"    # agent to send to when there's a choice
-chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # if it can't find your browser
+chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # use this browser instead of Chrome for Testing
 max_chars = 20000             # longest page text sent to an agent
 home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
 view_renderer = "blocks"      # if the view stays blank in your terminal
@@ -153,7 +156,8 @@ cell_aspect = 2.6             # if the page looks stretched
 
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font).
-- **"No Chrome found".** Set `chrome_path`.
+- **Clicking Chrome in the Dock does nothing.** The browser is using your own Chrome. Run `herdr-web-browser install-browser`.
+- **"No Chrome found".** Run `herdr-web-browser install-browser`, or set `chrome_path`.
 - **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden.
 
 ## For agents
