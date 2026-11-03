@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.2.0...v1.3.0) (2026-11-03)
+
+
+### Features
+
+* Install agents and Chrome for Testing on startup ([89d5100](https://github.com/MattJColes/herdr-web-browser/commit/89d5100fd47f391360522e438766740e0d26880f))
+* set up desktop, agents and Chrome for Testing by default ([0506466](https://github.com/MattJColes/herdr-web-browser/commit/0506466708b0be9f031b4378958b8cd4eaaffcd3))
+
 ## [1.2.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.1.0...v1.2.0) (2026-11-03)
 
 
