@@ -234,10 +234,17 @@ pub fn stop() -> R<bool> {
 
 /// Relaunch in `mode`, reopening every tab and keeping pane ownership.
 pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
-    let Some(url) = endpoint() else {
+    if endpoint().is_none() {
         launch(mode, cfg)?;
         return Ok(());
-    };
+    }
+    restart(mode, cfg, || Ok(()))
+}
+
+/// Stop the browser, run `between` (e.g. to change its profile), then relaunch in `mode`
+/// with every tab reopened and pane ownership kept. Not running: just `between`.
+pub fn restart(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> R<()> {
+    let Some(url) = endpoint() else { return between() };
     let mut c = Cdp::connect(&url)?;
     let owners = state::load()?.tabs;
     let tabs: Vec<(Option<String>, String)> = page::page_targets(&mut c)?
@@ -246,6 +253,7 @@ pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
         .collect();
     drop(c);
     stop()?;
+    let changed = between();
     let url = launch(mode, cfg)?;
     let mut c = Cdp::connect(&url)?;
     // Chrome registers its startup tab shortly after the port opens; wait so it
@@ -271,7 +279,7 @@ pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
         }
     }
     state::update(|s| s.tabs = map)?;
-    Ok(())
+    changed
 }
 
 #[cfg(test)]

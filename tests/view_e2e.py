@@ -108,6 +108,12 @@ def last_status():
     return hits[-3:]
 
 
+def last_status_text():
+    """Everything the view has drawn, escapes stripped."""
+    import re
+    return re.sub(rb"\x1b(\[[0-9;?<]*[a-zA-Z]|_G[^\x1b]*\x1b\\|\][^\x07]*\x07)", b"", bytes(screen)).decode("utf8", "replace")
+
+
 def click(col, row):
     os.write(fd, f"\x1b[<0;{col + 1};{row + 1}M".encode())
     os.write(fd, f"\x1b[<0;{col + 1};{row + 1}m".encode())
@@ -134,8 +140,8 @@ def key(b):
     pump(2.5)
 
 
-# Header, right of the address bar: screenshot then window, 4 columns each, then a gap.
-SHOT_COL, MODE_COL = COLS - 8, COLS - 4
+# Header, right of the address bar: screenshot, window, settings, 4 columns each, then a gap.
+SHOT_COL, MODE_COL, SETTINGS_COL = COLS - 12, COLS - 8, COLS - 4
 
 cli("eval", "getSelection().selectAllChildren(document.body)")
 before = calls()
@@ -147,6 +153,10 @@ check("send selection", "hc send t99 [herdr-web-browser] selection" in calls()[l
 before = calls()
 click(SHOT_COL, 0)
 check("screenshot", "hc send t99 [herdr-web-browser] screenshot" in calls()[len(before):])
+
+before = calls()
+click(SETTINGS_COL, 0)
+check("settings", "herdr-app do mod.open --name herdr-web-browser-settings" in calls()[len(before):] or "install-agents" in last_status_text(), calls()[len(before):][-200:])
 
 mine = state()["tabs"][OWNER]
 key(b"\x0e")  # ctrl+n

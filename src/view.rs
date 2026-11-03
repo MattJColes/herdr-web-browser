@@ -385,6 +385,7 @@ enum Act {
     SendSelection,
     Screenshot,
     Mode,
+    Settings,
     Quit,
 }
 
@@ -657,8 +658,8 @@ impl View {
     fn field(&self) -> (u16, usize) {
         let cols = Self::size().0 as usize;
         let tag = self.tag().chars().count();
-        // Caps (2), gap, tag, screenshot + window buttons (8), trailing gap.
-        (FIELD_START + 1, cols.saturating_sub(FIELD_START as usize + tag + 12).max(1))
+        // Caps (2), gap, tag, screenshot + window + settings buttons (12), trailing gap.
+        (FIELD_START + 1, cols.saturating_sub(FIELD_START as usize + tag + 16).max(1))
     }
 
     fn header(&self) -> (Vec<u8>, Vec<Hit>, Vec<Slot>) {
@@ -715,6 +716,7 @@ impl View {
         // Tabs, page/selection sends and quit stay on their ctrl+ keys.
         l.button(Icon::Camera, Act::Screenshot);
         l.button(Icon::Window, Act::Mode);
+        l.button(Icon::Settings, Act::Settings);
         l.fill(cols);
         l.finish()
     }
@@ -752,6 +754,7 @@ impl View {
             Act::Screenshot => "Send screenshot to agent",
             Act::Mode if self.mode == Mode::Headed => "Run headless",
             Act::Mode => "Open in a window",
+            Act::Settings => "Settings: set up agents, import Chrome sign-ins",
             Act::Quit => "Close view",
         }
     }
@@ -1006,6 +1009,15 @@ impl View {
         }
     }
 
+    /// The settings dialog is a herdr desktop mod; elsewhere, point at the commands.
+    fn open_settings(&mut self) {
+        let opened = std::env::var_os("HC_TERMINAL_ID").is_some()
+            && crate::host::run("herdr-app", &["do", "mod.open", "--name", "herdr-web-browser-settings"]).is_ok();
+        if !opened {
+            self.say("settings: run `herdr-web-browser install-agents` or `import-logins --list`");
+        }
+    }
+
     fn toggle_mode(&mut self) -> R<()> {
         self.say("switching mode…");
         self.draw_chrome()?;
@@ -1040,6 +1052,7 @@ impl View {
             Act::SendSelection => self.send(SendKind::Selection),
             Act::Screenshot => self.send(SendKind::Screenshot),
             Act::Mode => self.toggle_mode()?,
+            Act::Settings => self.open_settings(),
             Act::Quit => return Ok(false),
         }
         Ok(true)

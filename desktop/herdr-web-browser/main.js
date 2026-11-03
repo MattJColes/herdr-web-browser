@@ -2,7 +2,7 @@
 // herdr-web-browser menu (mod.open:herdr-web-browser): acts for the agent that had focus.
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { exec, agents, focused, props, closeOverlay, notify, theme } from "herdr";
+import { exec, agents, focused, props, closeOverlay, notify, theme, run } from "herdr";
 
 const BIN = "__HERDR_BROWSER_BIN__";
 
@@ -45,6 +45,9 @@ export default class Browser extends View {
       this.row(t, "hb-shot", "Send screenshot to agent", [...owner, "send", "screenshot", ...to]),
       this.row(t, "hb-mode", "Toggle headed / headless", ["mode"]),
       this.row(t, "hb-stop", "Stop the browser", ["stop"]),
+      div().id("hb-settings").px(12).py(7).rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click(() => { closeOverlay(props().overlay); run("mod.open", { name: "herdr-web-browser-settings" }); })
+        .child("Settings…"),
     ].filter(Boolean);
     return v_flex().id("root").size_full().bg(t.surface).p(6).gap(1).text_size(13).text_color(t.foreground)
       .child(div().px(12).py(6).text_color(t.muted).child(this.busy ? `${this.busy}…` : a ? `Browser · ${a}` : "Browser · no agent focused"))
