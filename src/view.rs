@@ -866,14 +866,7 @@ impl View {
             }
         }
         queue!(pre, cursor::MoveTo(0, PAGE_TOP))?;
-        let _ = self.out.send(Out::Frame {
-            pre,
-            b64: data.to_string(),
-            cols: c,
-            img_cols: self.cells.img_cols(c),
-            rows: r,
-            renderer: self.renderer,
-        });
+        let _ = self.out.send(Out::Frame { pre, b64: data.to_string(), cols: c, img_cols: self.cells.img_cols(c), rows: r, renderer: self.renderer });
         self.frame = Some((w, h, c, r));
         if self.last_frame.as_ref().is_none_or(|(d, _, _)| d != data) {
             self.last_frame = Some((data.to_string(), w, h));
@@ -992,9 +985,8 @@ impl View {
         let _ = self.draw_chrome();
         // A view opened beside an agent sends to that agent (never to a plain shell).
         let host = crate::host::host();
-        let agent = self.owner.clone().filter(|o| {
-            crate::host::agents(host).is_ok_and(|(list, _)| list.iter().any(|a| &a.id == o || &a.pane_id == o))
-        });
+        let agent =
+            self.owner.clone().filter(|o| crate::host::agents(host).is_ok_and(|(list, _)| list.iter().any(|a| &a.id == o || &a.pane_id == o)));
         // Without an owner the view may show any tab; send that one.
         let tab = match (&self.owner, &self.tab) {
             (None, Some(id)) => Cdp::connect(&chrome::ensure(&self.cfg).unwrap_or_default())

@@ -140,11 +140,7 @@ pub fn detect(cfg: &Config) -> (Cells, Renderer) {
 /// `k` is cell height / cell width.
 pub fn fit(w: f64, h: f64, cols: u16, rows: u16, k: f64) -> (u16, u16) {
     let want_rows = (cols as f64 * h / (w * k)).round().max(1.0);
-    if want_rows <= rows as f64 {
-        (cols, want_rows as u16)
-    } else {
-        (((rows as f64 * k * w / h).round().max(1.0) as u16).min(cols), rows)
-    }
+    if want_rows <= rows as f64 { (cols, want_rows as u16) } else { (((rows as f64 * k * w / h).round().max(1.0) as u16).min(cols), rows) }
 }
 
 /// Kitty graphics, double-buffered: upload the PNG (already base64) as image `id`, place it

@@ -25,14 +25,7 @@ const APP_PATHS: &[&str] = &[
     "Brave Browser.app/Contents/MacOS/Brave Browser",
 ];
 #[cfg(not(target_os = "macos"))]
-const BIN_NAMES: &[&str] = &[
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-    "microsoft-edge",
-    "brave-browser",
-];
+const BIN_NAMES: &[&str] = &["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"];
 
 pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
     if let Some(p) = &cfg.chrome_path {
@@ -63,11 +56,7 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
             }
         }
     }
-    Err(format!(
-        "no Chrome, Chromium, Edge or Brave found; set chrome_path in {}/config.toml",
-        state::config_dir().display()
-    )
-    .into())
+    Err(format!("no Chrome, Chromium, Edge or Brave found; set chrome_path in {}/config.toml", state::config_dir().display()).into())
 }
 
 /// `DevToolsActivePort` holds the port on line 1 and the browser ws path on line 2.
@@ -138,11 +127,7 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
-    cmd.arg("about:blank")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(log)
-        .process_group(0); // outlive the herdr action / pane that started us
+    cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log).process_group(0); // outlive the herdr action / pane that started us
     let child = cmd.spawn().map_err(|e| format!("launch {}: {e}", chrome.display()))?;
     let pid = child.id();
 
@@ -271,10 +256,8 @@ fn restart_locked(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> 
     let Some(url) = endpoint() else { return between() };
     let mut c = Cdp::connect(&url)?;
     let owners = state::load()?.tabs;
-    let tabs: Vec<(Option<String>, String)> = page::page_targets(&mut c)?
-        .into_iter()
-        .map(|t| (owners.iter().find(|(_, id)| **id == t.id).map(|(p, _)| p.clone()), t.url))
-        .collect();
+    let tabs: Vec<(Option<String>, String)> =
+        page::page_targets(&mut c)?.into_iter().map(|t| (owners.iter().find(|(_, id)| **id == t.id).map(|(p, _)| p.clone()), t.url)).collect();
     drop(c);
     stop()?;
     let changed = between();
@@ -312,10 +295,7 @@ mod tests {
 
     #[test]
     fn parses_devtools_active_port() {
-        assert_eq!(
-            parse_port_file("57047\n/devtools/browser/abc-123\n"),
-            Some((57047, "/devtools/browser/abc-123".into()))
-        );
+        assert_eq!(parse_port_file("57047\n/devtools/browser/abc-123\n"), Some((57047, "/devtools/browser/abc-123".into())));
     }
 
     #[test]

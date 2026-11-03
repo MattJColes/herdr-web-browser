@@ -241,10 +241,7 @@ impl Page {
     pub fn click(&mut self, target: &str) -> R<()> {
         let (x, y) = self.locate(target)?;
         for kind in ["mouseMoved", "mousePressed", "mouseReleased"] {
-            self.call(
-                "Input.dispatchMouseEvent",
-                json!({ "type": kind, "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1 }),
-            )?;
+            self.call("Input.dispatchMouseEvent", json!({ "type": kind, "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1 }))?;
         }
         sleep(Duration::from_millis(200));
         self.wait_ready();
@@ -310,11 +307,7 @@ impl Page {
             return Err("pick needs a visible browser: run `herdr-web-browser mode headed`".into());
         }
         self.activate()?;
-        let prelude = format!(
-            "const PROMPT = {}; const TIMEOUT_MS = {};",
-            serde_json::to_string(prompt)?,
-            timeout.as_millis()
-        );
+        let prelude = format!("const PROMPT = {}; const TIMEOUT_MS = {};", serde_json::to_string(prompt)?, timeout.as_millis());
         let v = self.cdp.eval(&self.session, &script(&prelude, PICK_JS), timeout + Duration::from_secs(5))?;
         if v["cancelled"] == true {
             return Err("pick cancelled by the user".into());

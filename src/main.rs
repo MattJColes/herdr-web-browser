@@ -8,8 +8,8 @@ mod cdp;
 mod chrome;
 mod debug;
 mod host;
-mod logins;
 mod icons;
+mod logins;
 mod native_host;
 mod page;
 mod pane;
@@ -54,7 +54,9 @@ enum Cmd {
     /// Show whether the browser runs, its mode and tabs.
     Status,
     /// Relaunch in MODE (or the other mode), keeping tabs and their owners.
-    Mode { mode: Option<Mode> },
+    Mode {
+        mode: Option<Mode>,
+    },
     /// Navigate this pane's tab (or a new tab) to URL.
     Open {
         url: String,
@@ -67,7 +69,9 @@ enum Cmd {
     /// List tabs; `*` marks this pane's tab.
     Tabs,
     /// Make tab N this pane's tab.
-    Tab { n: usize },
+    Tab {
+        n: usize,
+    },
     Back,
     Reload,
     /// Print the page's visible text.
@@ -78,7 +82,9 @@ enum Cmd {
     /// List interactive elements as `[n] role "name"`; use n with click/type.
     Snapshot,
     /// Click element n (from snapshot) or a CSS selector.
-    Click { target: String },
+    Click {
+        target: String,
+    },
     /// Replace an input's contents with TEXT.
     Type {
         target: String,
@@ -87,7 +93,9 @@ enum Cmd {
         submit: bool,
     },
     /// Evaluate JavaScript in the page and print the result.
-    Eval { js: String },
+    Eval {
+        js: String,
+    },
     /// Console output and uncaught errors (with stacks) since the page loaded.
     Console {
         /// Show at most the last N entries.
@@ -107,7 +115,9 @@ enum Cmd {
         clear: bool,
     },
     /// Save a PNG screenshot.
-    Screenshot { path: PathBuf },
+    Screenshot {
+        path: PathBuf,
+    },
     /// Wait until a CSS selector is visible.
     Wait {
         css: String,
@@ -170,11 +180,15 @@ enum Cmd {
     #[command(hide = true)]
     MenuOpen,
     #[command(hide = true)]
-    Picked { name: Option<String> },
+    Picked {
+        name: Option<String>,
+    },
     #[command(hide = true)]
     TakeToast,
     #[command(hide = true)]
-    ThemeSync { data: String },
+    ThemeSync {
+        data: String,
+    },
     /// Usage guide for AI agents.
     AgentHelp,
     #[command(hide = true)]
@@ -309,7 +323,11 @@ fn install_desktop() -> R<String> {
         host::run("herdr-app", &["check", &dst.display().to_string()]).map_err(|e| format!("mod {name} failed its check: {e}"))?;
     }
     register_program(&home)?;
-    Ok(format!("installed {} into {}; open the menu with `mod.open:herdr-web-browser` (e.g. bind it in keys.json)", DESKTOP_MODS.join(", "), home.join("mods").display()))
+    Ok(format!(
+        "installed {} into {}; open the menu with `mod.open:herdr-web-browser` (e.g. bind it in keys.json)",
+        DESKTOP_MODS.join(", "),
+        home.join("mods").display()
+    ))
 }
 
 /// Give the live view its own name and icon in herdr desktop (instead of a generic terminal),
@@ -322,11 +340,7 @@ fn register_program(home: &std::path::Path) -> R<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
         Err(e) => return Err(e.into()),
     };
-    let programs = doc
-        .as_object_mut()
-        .ok_or("programs.json is not an object")?
-        .entry("programs")
-        .or_insert_with(|| json!({}));
+    let programs = doc.as_object_mut().ok_or("programs.json is not an object")?.entry("programs").or_insert_with(|| json!({}));
     programs.as_object_mut().ok_or("programs.json `programs` is not an object")?.insert(
         "herdr-web-browser".into(),
         // `run` lists it in herdr desktop's + menu; menu-open moves it into a split.
@@ -408,7 +422,13 @@ fn run(cli: Cli) -> R<()> {
                 .iter()
                 .map(|r| {
                     let mark = if r["mine"] == true { "*" } else { " " };
-                    format!("{mark}{:>2} [{}] {} — {}", r["n"], r["owner"].as_str().unwrap_or("-"), r["title"].as_str().unwrap_or(""), r["url"].as_str().unwrap_or(""))
+                    format!(
+                        "{mark}{:>2} [{}] {} — {}",
+                        r["n"],
+                        r["owner"].as_str().unwrap_or("-"),
+                        r["title"].as_str().unwrap_or(""),
+                        r["url"].as_str().unwrap_or("")
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
@@ -568,7 +588,8 @@ fn run(cli: Cli) -> R<()> {
             print(j, msg.clone(), json!({ "message": msg }));
         }
         Cmd::View { own_tab } => {
-            if own_tab && page::OWNER.get().is_none()
+            if own_tab
+                && page::OWNER.get().is_none()
                 && let Some(me) = page::caller_pane()
             {
                 let _ = page::OWNER.set(me);

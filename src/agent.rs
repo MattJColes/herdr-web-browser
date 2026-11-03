@@ -1,7 +1,7 @@
 //! Browser → agent: target resolution, payload wrapping, delivery through the host.
 
-use crate::state::{self, Config, Picker};
 use crate::host::{self, Host};
+use crate::state::{self, Config, Picker};
 use crate::{R, page};
 use std::path::{Path, PathBuf};
 use std::thread::sleep;

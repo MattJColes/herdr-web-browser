@@ -28,11 +28,8 @@ fn dir() -> PathBuf {
 pub fn installed() -> Option<PathBuf> {
     let p = platform().ok()?;
     let base = dir().join(format!("chrome-{p}"));
-    let exe = if p.starts_with("mac") {
-        base.join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")
-    } else {
-        base.join("chrome")
-    };
+    let exe =
+        if p.starts_with("mac") { base.join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing") } else { base.join("chrome") };
     exe.is_file().then_some(exe)
 }
 
