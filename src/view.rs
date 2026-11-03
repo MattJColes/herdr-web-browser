@@ -29,6 +29,8 @@ struct StreamSize {
     viewport: (u32, u32),
     dpr: f64,
     max_frame: (u32, u32),
+    /// JPEG frames for `KittyStream` (cheap for Chrome to encode); else PNG.
+    jpeg: bool,
 }
 
 /// Screencast `target` on its own connection until `stop`; acks every frame.
@@ -47,7 +49,13 @@ fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sen
         }
         c.call(
             "Page.startScreencast",
-            json!({ "format": "png", "maxWidth": size.max_frame.0, "maxHeight": size.max_frame.1, "everyNthFrame": 1 }),
+            json!({
+                "format": if size.jpeg { "jpeg" } else { "png" },
+                "quality": 85,
+                "maxWidth": size.max_frame.0,
+                "maxHeight": size.max_frame.1,
+                "everyNthFrame": 1,
+            }),
             Some(&sid),
         )?;
         while !stop.load(Ordering::Relaxed) {
@@ -219,7 +227,17 @@ impl UrlEdit {
 /// on the main loop would make keys, clicks and scrolling wait behind every frame.
 enum Out {
     Bytes(Vec<u8>),
-    Frame { pre: Vec<u8>, b64: String, cols: u16, img_cols: u16, rows: u16, renderer: Renderer },
+    /// `raw`: draw with `KittyStream` (only the changed box); `full`: a whole frame, the screen was cleared.
+    Frame {
+        pre: Vec<u8>,
+        b64: String,
+        cols: u16,
+        img_cols: u16,
+        rows: u16,
+        renderer: Renderer,
+        raw: bool,
+        full: bool,
+    },
 }
 
 /// Write output in order, but when frames pile up show only the newest. Owns the Kitty
@@ -228,18 +246,22 @@ fn spawn_writer() -> (Sender<Out>, std::thread::JoinHandle<()>) {
     let (tx, rx) = mpsc::channel::<Out>();
     let handle = std::thread::spawn(move || {
         let mut flip = false;
+        let mut raw_frames = render::KittyStream::default();
         while let Ok(first) = rx.recv() {
             let mut batch = vec![first];
             batch.extend(rx.try_iter());
             let newest = batch.iter().rposition(|o| matches!(o, Out::Frame { .. }));
+            // A skipped frame may have been the whole one the screen needed after a clear.
+            let any_full = batch.iter().any(|o| matches!(o, Out::Frame { full: true, .. }));
             let mut buf = Vec::new();
             for (i, item) in batch.into_iter().enumerate() {
                 match item {
                     Out::Bytes(b) => buf.extend_from_slice(&b),
-                    Out::Frame { pre, b64, cols, img_cols, rows, renderer } if Some(i) == newest => {
+                    Out::Frame { pre, b64, cols, img_cols, rows, renderer, raw, full } if Some(i) == newest => {
                         buf.extend_from_slice(SYNC_ON.as_bytes());
                         buf.extend_from_slice(&pre);
                         let drawn = match renderer {
+                            Renderer::Kitty if raw => raw_frames.draw(&mut buf, &b64, img_cols, rows, full || any_full),
                             Renderer::Kitty => {
                                 let (id, old) = if flip { (IMAGE_ID + 1, IMAGE_ID) } else { (IMAGE_ID, IMAGE_ID + 1) };
                                 flip = !flip;
@@ -507,6 +529,10 @@ struct View {
     cfg: Config,
     cells: Cells,
     renderer: Renderer,
+    /// Frames as raw RGBA with only the changed box resent (render::KittyStream).
+    /// ponytail: herdr desktop only, the one terminal where Kitty frame edits are verified;
+    /// probe with `a=q` before enabling it for kitty/Ghostty/WezTerm.
+    raw_frames: bool,
     owner: Option<String>,
     /// Tab shown when there is no owner.
     tab: Option<String>,
@@ -584,7 +610,7 @@ impl View {
             // Two pixels per cell; 4x that leaves room for box-averaging.
             Renderer::Blocks => (c as u32 * 4, r as u32 * 8),
         };
-        StreamSize { viewport, dpr: self.cells.dpr, max_frame }
+        StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames }
     }
 
     fn ensure_stream(&mut self) -> R<()> {
@@ -866,7 +892,9 @@ impl View {
             }
         }
         queue!(pre, cursor::MoveTo(0, PAGE_TOP))?;
-        let _ = self.out.send(Out::Frame { pre, b64: data.to_string(), cols: c, img_cols: self.cells.img_cols(c), rows: r, renderer: self.renderer });
+        let (raw, full) = (self.raw_frames, self.frame.is_none());
+        let frame = Out::Frame { pre, b64: data.to_string(), cols: c, img_cols: self.cells.img_cols(c), rows: r, renderer: self.renderer, raw, full };
+        let _ = self.out.send(frame);
         self.frame = Some((w, h, c, r));
         if self.last_frame.as_ref().is_none_or(|(d, _, _)| d != data) {
             self.last_frame = Some((data.to_string(), w, h));
@@ -1156,6 +1184,7 @@ pub fn run(cfg: Config) -> R<()> {
         cfg,
         cells,
         renderer,
+        raw_frames: renderer == Renderer::Kitty && std::env::var_os("HC_TERMINAL_ID").is_some(),
         // Only an explicit --owner: the view's own terminal isn't an agent worth a tab.
         owner: page::OWNER.get().cloned(),
         tab: None,
