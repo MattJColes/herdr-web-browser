@@ -116,9 +116,16 @@ enum Cmd {
     /// Install the herdr desktop mods (menu, picker, toast) into ~/.config/herdr-app/mods.
     InstallDesktop,
     /// Live view of this pane's tab (Kitty graphics terminal; herdr desktop).
-    View,
+    View {
+        /// Browse in a tab owned by this terminal, not the focused one (herdr desktop's + menu).
+        #[arg(long)]
+        own_tab: bool,
+    },
     /// Open the live view in a new pane beside the caller.
     Show,
+    /// Started by herdr desktop's + menu: move into a split beside the last focused agent.
+    #[command(hide = true)]
+    MenuOpen,
     #[command(hide = true)]
     Picked { name: Option<String> },
     #[command(hide = true)]
@@ -262,6 +269,7 @@ fn install_desktop() -> R<String> {
 /// Give the live view its own name and icon in herdr desktop (instead of a generic terminal),
 /// merged into the user's programs.json without touching their other entries.
 fn register_program(home: &std::path::Path) -> R<()> {
+    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
     let path = home.join("programs.json");
     let mut doc: Value = match std::fs::read_to_string(&path) {
         Ok(s) => serde_json::from_str(&s).map_err(|e| format!("{}: {e}; not changing it", path.display()))?,
@@ -275,7 +283,8 @@ fn register_program(home: &std::path::Path) -> R<()> {
         .or_insert_with(|| json!({}));
     programs.as_object_mut().ok_or("programs.json `programs` is not an object")?.insert(
         "herdr-web-browser".into(),
-        json!({ "name": "Browser", "icon": "mods/herdr-web-browser/icon.svg", "tint": true, "tile": "#1a73e8", "color": "#ffffff" }),
+        // `run` lists it in herdr desktop's + menu; menu-open moves it into a split.
+        json!({ "name": "Browser", "icon": "mods/herdr-web-browser/icon.svg", "tint": true, "tile": "#1a73e8", "color": "#ffffff", "run": [exe, "menu-open"] }),
     );
     std::fs::write(&path, serde_json::to_vec_pretty(&doc)?)?;
     Ok(())
@@ -468,7 +477,27 @@ fn run(cli: Cli) -> R<()> {
             let msg = install_desktop()?;
             print(j, msg.clone(), json!({ "message": msg }));
         }
-        Cmd::View => view::run(cfg)?,
+        Cmd::View { own_tab } => {
+            if own_tab && page::OWNER.get().is_none()
+                && let Some(me) = page::caller_pane()
+            {
+                let _ = page::OWNER.set(me);
+                // A fresh tab opens on the home page; loading it in the background lets the view
+                // appear at once. Failing (offline) just leaves the blank tab.
+                let mut p = page::resolve(&cfg, None, true)?;
+                if p.tab.url == "about:blank" {
+                    let home = cfg.home_page().to_string();
+                    std::thread::spawn(move || drop(p.navigate(&home)));
+                }
+            }
+            view::run(cfg)?
+        }
+        Cmd::MenuOpen => {
+            if !host::split_beside_agent()? {
+                let _ = page::OWNER.set(page::caller_pane().ok_or("no herdr terminal")?);
+                view::run(cfg)?
+            }
+        }
         Cmd::Show => {
             let msg = host::open_view(host::host(), page::caller_pane().as_deref())?;
             print(j, msg.clone(), json!({ "message": msg }));

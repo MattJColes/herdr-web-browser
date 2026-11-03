@@ -60,9 +60,12 @@ pub struct Config {
     pub cell_aspect: Option<f64>,
     /// Live view: "kitty" or "blocks"; detected when unset.
     pub view_renderer: Option<String>,
+    /// What a new Browser (herdr desktop's + menu) opens on.
+    pub home_page: Option<String>,
 }
 
 pub const DEFAULT_MAX_CHARS: usize = 20_000;
+pub const DEFAULT_HOME_PAGE: &str = "https://www.google.com";
 
 impl Config {
     pub fn load() -> R<Config> {
@@ -75,6 +78,9 @@ impl Config {
     }
     pub fn max_chars(&self) -> usize {
         self.max_chars.unwrap_or(DEFAULT_MAX_CHARS)
+    }
+    pub fn home_page(&self) -> &str {
+        self.home_page.as_deref().unwrap_or(DEFAULT_HOME_PAGE)
     }
 }
 

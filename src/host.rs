@@ -222,19 +222,10 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
                 return Ok(format!("live view already open in terminal {t}"));
             }
             let mut args = vec!["do".to_string(), "pane.split".into(), "--direction".into(), "right".into()];
-            if let Some(o) = owner {
-                let ls = run("herdr-app", &["ls"])?;
-                let pane = ls["spaces"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .flat_map(|sp| sp["tabs"].as_array().into_iter().flatten())
-                    .flat_map(|t| t["terminals"].as_array().into_iter().flatten())
-                    .find(|t| t["terminal"] == o)
-                    .map(|t| s(t, "pane"));
-                if let Some(p) = pane.filter(|p| !p.is_empty()) {
-                    args.extend(["--pane".into(), p]);
-                }
+            if let Some(o) = owner
+                && let Some((_, p)) = desktop_place(&run("herdr-app", &["ls"])?, o)
+            {
+                args.extend(["--pane".into(), p]);
             }
             args.extend(["--argv".into(), serde_json::to_string(&argv)?]);
             let refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -254,6 +245,41 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
             Ok(format!("live view in pane {pane} (needs a terminal with Kitty graphics)"))
         }
     }
+}
+
+/// The herdr desktop tab and pane that hold `terminal`, from `herdr-app ls`.
+fn desktop_place(ls: &Value, terminal: &str) -> Option<(String, String)> {
+    ls["spaces"]
+        .as_array()?
+        .iter()
+        .flat_map(|sp| sp["tabs"].as_array().into_iter().flatten())
+        .find_map(|tab| {
+            let t = tab["terminals"].as_array()?.iter().find(|t| t["terminal"] == terminal)?;
+            Some((s(tab, "id"), s(t, "pane"))).filter(|(_, p)| !p.is_empty())
+        })
+}
+
+/// herdr desktop's + menu always starts programs in a new tab. Move the browser into a
+/// split right of the last focused agent instead and close that tab. Returns false
+/// (stay put) when there's no agent to sit beside.
+/// ponytail: "last focused agent" stands in for "the tab you were on"; herdr reports no tab history.
+pub fn split_beside_agent() -> R<bool> {
+    let me = env("HC_TERMINAL_ID").ok_or("not in a herdr desktop terminal")?;
+    let status = run("herdr-app", &["status"])?;
+    let Some(agent) = status["agent"].as_str().filter(|a| *a != me) else { return Ok(false) };
+    let ls = run("herdr-app", &["ls"])?;
+    let (Some((_, pane)), Some((my_tab, _))) = (desktop_place(&ls, agent), desktop_place(&ls, &me)) else {
+        return Ok(false);
+    };
+    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let argv = serde_json::to_string(&[exe.as_str(), "view", "--own-tab"])?;
+    let made = run("herdr-app", &["do", "pane.split", "--direction", "right", "--pane", &pane, "--argv", &argv])?;
+    if let Some(t) = made["terminal"].as_str() {
+        drop(run("herdr-app", &["do", "pane.focus", "--terminal", t]));
+    }
+    // Last: closing this tab ends this process.
+    run("herdr-app", &["do", "tab.close", "--id", &my_tab, "--confirmed", "true"])?;
+    Ok(true)
 }
 
 /// A running live view for `owner`, so `show` doesn't open a second one.
