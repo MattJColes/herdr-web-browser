@@ -185,7 +185,7 @@ fn decode_rgb(b64: &str) -> R<(usize, usize, Vec<u8>)> {
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = dec.read_info()?;
-    let mut buf = vec![0; reader.output_buffer_size()];
+    let mut buf = vec![0; reader.output_buffer_size().ok_or("PNG frame too large")?];
     let info = reader.next_frame(&mut buf)?;
     let ch = info.color_type.samples();
     let (w, h) = (info.width as usize, info.height as usize);
@@ -287,5 +287,16 @@ mod tests {
         // 2x1 image: black and white -> one grey pixel.
         let rgb = [0, 0, 0, 255, 255, 255];
         assert_eq!(downsample(2, 1, &rgb, 1, 1), vec![[127, 127, 127]]);
+    }
+
+    #[test]
+    fn decode_rgb_drops_alpha_from_a_png() {
+        let mut bytes = Vec::new();
+        let mut enc = png::Encoder::new(&mut bytes, 2, 1);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[255, 0, 0, 255, 0, 128, 255, 10]).unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        assert_eq!(decode_rgb(&b64).unwrap(), (2, 1, vec![255, 0, 0, 0, 128, 255]));
     }
 }
