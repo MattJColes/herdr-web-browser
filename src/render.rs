@@ -66,12 +66,25 @@ pub fn parse_kitty_reply(buf: &[u8]) -> bool {
 }
 
 /// herdr desktop draws terminals itself while herdr-core answers `CSI 16 t` with a fixed
-/// 10x20, so derive cells from the app's font size (cells measured 8.4x22 px at 14 pt).
+/// 10x20, so derive cells from the app's font size (cells measured 8.4x22 px at 14 pt),
+/// in device pixels so Retina screens get 2x frames rather than 1x ones stretched.
 fn desktop_cells() -> Option<Cells> {
     let st = crate::host::run("herdr-app", &["status"]).ok()?;
     let fs = st["font_size"].as_f64()? * st["zoom"].as_f64().unwrap_or(1.0);
+    let scale = screen_scale().unwrap_or(1.0);
     // Kitty images now sit on the same fractional grid as text, so image columns = text columns.
-    Some(Cells::from_px(fs * 0.6, fs * 22.0 / 14.0))
+    Some(Cells::from_px(fs * 0.6 * scale, fs * 22.0 / 14.0 * scale))
+}
+
+/// The screen's backing scale (2 on Retina); herdr desktop only reports logical sizes.
+/// ponytail: macOS's main screen, not necessarily the one herdr's window is on.
+fn screen_scale() -> Option<f64> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let js = "ObjC.import('AppKit'); $.NSScreen.mainScreen.backingScaleFactor";
+    let out = std::process::Command::new("osascript").args(["-l", "JavaScript", "-e", js]).output().ok()?;
+    String::from_utf8_lossy(&out.stdout).trim().parse().ok().filter(|s: &f64| (1.0..=4.0).contains(s))
 }
 
 /// Read terminal replies until DA1 arrives or `timeout` passes, without leaving a reader
