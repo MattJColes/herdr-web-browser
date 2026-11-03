@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.1.0...v1.2.0) (2026-11-03)
+
+
+### Features
+
+* **desktop:** set up herdr desktop and its menu shortcut by default ([ab58e62](https://github.com/MattJColes/herdr-web-browser/commit/ab58e62b8ad43c1044334453256d953faca94c78))
+* **desktop:** set up herdr desktop and its menu shortcut by default ([8905262](https://github.com/MattJColes/herdr-web-browser/commit/8905262b3ac0e95adb2b4439f5f83e2a96caab24))
+
 ## [1.1.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.0.0...v1.1.0) (2026-11-03)
 
 
