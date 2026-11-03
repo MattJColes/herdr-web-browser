@@ -1,4 +1,4 @@
-# herdr-browser
+# herdr-web-browser
 
 A web browser for [herdr](https://herdr.dev). It shows pages in a pane right next to your coding agent. You can use the page yourself, the agent can use it too, and either of you can pass what's on screen to the other.
 
