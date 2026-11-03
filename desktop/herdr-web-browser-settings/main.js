@@ -27,6 +27,8 @@ export default class Settings extends View {
     // Like herdr's own dialogs: focus now, and again once the overlay has settled.
     this.search.focus();
     cx.timer.after(600, () => this.search.focus());
+    // The dialog only gets keys when its root tracks a focus handle (as herdr's own dialogs do).
+    this.handle = cx.focus_handle();
     cx.spawn(async (cx) => {
       const r = await exec(BIN, ["--json", "import-logins", "--list"]).catch((e) => ({ code: 1, stdout: "", stderr: String(e) }));
       if (r.code === 0) this.sites = JSON.parse(r.stdout);
@@ -104,7 +106,7 @@ export default class Settings extends View {
       ? div().px(10).text_color(t.dim).child(this.error || "Reading Google Chrome's sign-ins…")
       : v_flex().flex_1().min_h(0).overflow_y_scrollbar().children(shown.map((s) => this.siteRow(t, s)))
         .when(shown.length === 0, (el) => el.child(div().px(10).py(6).text_color(t.dim).child("No matching sites")));
-    return v_flex().id("root").size_full().bg(t.popover).p(14).gap(10).text_size(13).text_color(t.foreground)
+    return v_flex().id("root").track_focus(this.handle).size_full().bg(t.popover).p(14).gap(10).text_size(13).text_color(t.foreground)
       .child(div().text_size(15).child("Browser settings"))
       .child(h_flex().gap(10).items_center()
         .child(div().flex_1().text_color(t.muted).child("Teach Claude Code, Codex, OpenCode and Pi to open web pages here."))
