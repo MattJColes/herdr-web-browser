@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.0.0...v1.1.0) (2026-11-03)
+
+
+### Features
+
+* uninstall command; README update and uninstall steps ([d1783f5](https://github.com/MattJColes/herdr-web-browser/commit/d1783f5a6a5b6c6aac8d7af2f286ff0b94866e3d))
+* uninstall command; README update and uninstall steps ([e16c6a3](https://github.com/MattJColes/herdr-web-browser/commit/e16c6a30672e489ab118d4e0a368b55b76e138e8))
+
+
+### Performance Improvements
+
+* **view:** raw RGBA frames with changed-region updates on herdr desktop ([f0236ee](https://github.com/MattJColes/herdr-web-browser/commit/f0236ee6f346049bf5ab53b0c785072f6789e466))
+* **view:** raw RGBA frames with changed-region updates on herdr desktop ([351b020](https://github.com/MattJColes/herdr-web-browser/commit/351b020eccbfc2ba0913c157bdb11039c6e9e4ef))
+
 ## [1.0.0](https://github.com/MattJColes/herdr-web-browser/compare/v0.1.0...v1.0.0) (2026-11-03)
 
 
