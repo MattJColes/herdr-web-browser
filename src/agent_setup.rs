@@ -59,6 +59,55 @@ pub fn upsert(text: &str, block: &str) -> String {
     format!("{text}{sep}{fenced}\n")
 }
 
+/// `text` without our section (and the blank line written before it).
+pub fn remove(text: &str) -> String {
+    match (text.find(START), text.find(END)) {
+        (Some(a), Some(b)) if a < b => {
+            let before = text[..a].strip_suffix('\n').unwrap_or(&text[..a]);
+            let after = text[b + END.len()..].strip_prefix('\n').unwrap_or(&text[b + END.len()..]);
+            format!("{before}{after}")
+        }
+        _ => text.to_string(),
+    }
+}
+
+fn home() -> R<PathBuf> {
+    Ok(PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?))
+}
+
+fn skill_dir(home: &Path) -> PathBuf {
+    home.join(".claude/skills/herdr-web-browser")
+}
+
+/// (agent, its home folder, its global instructions file)
+fn note_files(home: &Path) -> [(&'static str, PathBuf, PathBuf); 3] {
+    let codex = std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".codex"));
+    [
+        ("Codex", codex.clone(), codex.join("AGENTS.md")),
+        ("OpenCode", home.join(".config/opencode"), home.join(".config/opencode/AGENTS.md")),
+        ("Pi", home.join(".pi/agent"), home.join(".pi/agent/AGENTS.md")),
+    ]
+}
+
+/// Undo `install_agents`: delete the skill and take our section out of each AGENTS.md.
+pub fn uninstall_agents() -> R<Vec<String>> {
+    let home = home()?;
+    let mut done = Vec::new();
+    if skill_dir(&home).is_dir() {
+        std::fs::remove_dir_all(skill_dir(&home))?;
+        done.push(format!("removed {}", skill_dir(&home).display()));
+    }
+    for (_, _, file) in note_files(&home) {
+        if let Ok(text) = std::fs::read_to_string(&file)
+            && text.contains(START)
+        {
+            std::fs::write(&file, remove(&text))?;
+            done.push(format!("removed our section from {}", file.display()));
+        }
+    }
+    Ok(done)
+}
+
 fn write_note(path: &Path) -> R<()> {
     let old = match std::fs::read_to_string(path) {
         Ok(s) => s,
@@ -71,21 +120,15 @@ fn write_note(path: &Path) -> R<()> {
 
 /// Set up every agent whose home folder exists; returns what was written.
 pub fn install_agents() -> R<String> {
-    let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
+    let home = home()?;
     let mut done = Vec::new();
     if home.join(".claude").is_dir() {
-        let dir = home.join(".claude/skills/herdr-web-browser");
+        let dir = skill_dir(&home);
         std::fs::create_dir_all(&dir)?;
         std::fs::write(dir.join("SKILL.md"), SKILL)?;
         done.push(format!("Claude Code skill: {}", dir.join("SKILL.md").display()));
     }
-    let codex = std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".codex"));
-    // (agent, its home, its global instructions file)
-    for (name, dir, file) in [
-        ("Codex", codex.clone(), codex.join("AGENTS.md")),
-        ("OpenCode", home.join(".config/opencode"), home.join(".config/opencode/AGENTS.md")),
-        ("Pi", home.join(".pi/agent"), home.join(".pi/agent/AGENTS.md")),
-    ] {
+    for (name, dir, file) in note_files(&home) {
         if dir.is_dir() {
             write_note(&file)?;
             done.push(format!("{name}: {}", file.display()));
@@ -107,6 +150,14 @@ mod tests {
         assert_eq!(first, format!("# Mine\n\n{START}\nv1\n{END}\n"));
         let again = upsert(&format!("{first}after\n"), "v2");
         assert_eq!(again, format!("# Mine\n\n{START}\nv2\n{END}\nafter\n"));
+    }
+
+    #[test]
+    fn remove_takes_out_only_our_section() {
+        let mine = "# Mine\n\nkeep this\n";
+        assert_eq!(remove(&upsert(mine, "ours")), mine);
+        assert_eq!(remove(&format!("{}after\n", upsert(mine, "ours"))), format!("{mine}after\n"));
+        assert_eq!(remove(mine), mine);
     }
 
     #[test]

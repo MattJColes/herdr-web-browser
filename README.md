@@ -90,6 +90,39 @@ herdr plugin link "$PWD"
 
 This adds the browser's actions, status pane and agent picker to herdr.
 
+## Update
+
+If you installed from the marketplace:
+
+```sh
+herdr plugin update herdr-web-browser
+```
+
+If you installed from source:
+
+```sh
+cd herdr-web-browser
+git pull
+cargo build --release
+```
+
+Then refresh the parts that live outside the plugin folder, since they can change between versions:
+
+```sh
+herdr-web-browser install-desktop    # herdr desktop only
+herdr-web-browser install-agents
+herdr-web-browser install-browser    # gets the latest Chrome for Testing
+```
+
+## Uninstall
+
+```sh
+herdr-web-browser uninstall          # add --purge to also delete its profile, logins and Chrome for Testing
+herdr plugin uninstall herdr-web-browser
+```
+
+`uninstall` stops the browser, removes the agent skill and its section from each agent's `AGENTS.md` (the rest of the file is left alone), removes the herdr desktop mods and the + menu entry, and removes the `herdr-web-browser` link from `~/.local/bin`. If you installed from source, run `herdr plugin unlink herdr-web-browser` instead of `herdr plugin uninstall`, then delete the folder.
+
 ## Open the browser
 
 The easiest way is to ask your agent:
