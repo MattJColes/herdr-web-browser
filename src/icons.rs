@@ -1,4 +1,4 @@
-//! Toolbar icons in herdr desktop's style (24-unit stroke icons, round caps),
+//! Live-view button icons in herdr desktop's style (24-unit stroke icons, round caps),
 //! rasterized for Kitty graphics; glyphs stand in where images aren't available.
 
 use crate::R;
@@ -11,17 +11,11 @@ pub enum Icon {
     Back,
     Forward,
     Reload,
-    TabPrev,
-    TabNext,
-    Send,
-    Selection,
     Camera,
     Window,
-    Close,
 }
 
-pub const ALL: [Icon; 10] =
-    [Icon::Back, Icon::Forward, Icon::Reload, Icon::TabPrev, Icon::TabNext, Icon::Send, Icon::Selection, Icon::Camera, Icon::Window, Icon::Close];
+pub const ALL: [Icon; 5] = [Icon::Back, Icon::Forward, Icon::Reload, Icon::Camera, Icon::Window];
 
 impl Icon {
     fn body(self) -> &'static str {
@@ -29,13 +23,8 @@ impl Icon {
             Icon::Back => r#"<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>"#,
             Icon::Forward => r#"<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>"#,
             Icon::Reload => r#"<path d="M20 12a8 8 0 1 1-2.35-5.65"/><path d="M20 4v5h-5"/>"#,
-            Icon::TabPrev => r#"<path d="m15 18-6-6 6-6"/>"#,
-            Icon::TabNext => r#"<path d="m9 18 6-6-6-6"/>"#,
-            Icon::Send => r#"<path d="M21 3 10.5 13.5"/><path d="M21 3 14.5 21l-4-7.5L3 9.5z"/>"#,
-            Icon::Selection => r#"<path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M8.5 12h7"/>"#,
             Icon::Camera => r#"<path d="M4 8.5h3l1.8-2.5h6.4L17 8.5h3V19H4z"/><circle cx="12" cy="13.5" r="3.2"/>"#,
             Icon::Window => r#"<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9h18"/>"#,
-            Icon::Close => r#"<path d="M6 6l12 12"/><path d="M18 6 6 18"/>"#,
         }
     }
 
@@ -45,13 +34,8 @@ impl Icon {
             Icon::Back => "←",
             Icon::Forward => "→",
             Icon::Reload => "↻",
-            Icon::TabPrev => "‹",
-            Icon::TabNext => "›",
-            Icon::Send => "↗",
-            Icon::Selection => "❝",
             Icon::Camera => "◉",
             Icon::Window => "◐",
-            Icon::Close => "✕",
         }
     }
 

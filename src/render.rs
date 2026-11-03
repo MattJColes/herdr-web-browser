@@ -70,8 +70,8 @@ pub fn parse_kitty_reply(buf: &[u8]) -> bool {
 fn desktop_cells() -> Option<Cells> {
     let st = crate::host::run("herdr-app", &["status"]).ok()?;
     let fs = st["font_size"].as_f64()? * st["zoom"].as_f64().unwrap_or(1.0);
-    let c = Cells::from_px(fs * 0.6, fs * 22.0 / 14.0);
-    Some(Cells { img_w: c.w.floor().max(1.0), ..c })
+    // Kitty images now sit on the same fractional grid as text, so image columns = text columns.
+    Some(Cells::from_px(fs * 0.6, fs * 22.0 / 14.0))
 }
 
 /// Read terminal replies until DA1 arrives or `timeout` passes, without leaving a reader

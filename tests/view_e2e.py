@@ -7,6 +7,7 @@ on PATH stand in for herdr desktop, so sends are logged instead of typed into
 a real agent. The browser it drives is the real one (headless, own state dir).
 
     python3 -I tests/view_e2e.py [path/to/herdr-web-browser]
+    E2E_WINDOW=1 python3 -I tests/view_e2e.py   # also the window button (opens Chrome)
 """
 import fcntl
 import json
@@ -114,7 +115,6 @@ def click(col, row):
 
 
 pump(4)  # detection timeout, attach, first frames
-BOTTOM = ROWS - 1
 
 click(2, 0)
 check("back", url().startswith("data:text/html,<title>A"), url())
@@ -129,35 +129,41 @@ os.write(fd, b"data:text/html,<title>C</title>typed\r")
 pump(3)
 check("address bar", url().startswith("data:text/html,<title>C"), url())
 
+def key(b):
+    os.write(fd, b)
+    pump(2.5)
+
+
+# Header, right of the address bar: screenshot then window, 4 columns each, then a gap.
+SHOT_COL, MODE_COL = COLS - 8, COLS - 4
+
 cli("eval", "getSelection().selectAllChildren(document.body)")
 before = calls()
-click(17, BOTTOM)
+key(b"\x07")  # ctrl+g
 check("send page", "hc send t99 [herdr-web-browser] page" in calls()[len(before):], calls()[len(before):][-200:])
 before = calls()
-click(21, BOTTOM)
+key(b"\x13")  # ctrl+s
 check("send selection", "hc send t99 [herdr-web-browser] selection" in calls()[len(before):])
 before = calls()
-click(25, BOTTOM)
+click(SHOT_COL, 0)
 check("screenshot", "hc send t99 [herdr-web-browser] screenshot" in calls()[len(before):])
 
-tabs = cli("tabs")
 mine = state()["tabs"][OWNER]
-tab_text = f" {next(t['n'] for t in tabs if t['mine'])}/{len(tabs)} "
-next_col = 5 + len(tab_text) + 1
-click(next_col, BOTTOM)
-moved = state()["tabs"][OWNER]
-check("next tab", moved != mine, f"{len(tabs)} tabs")
-click(2, BOTTOM)
+key(b"\x0e")  # ctrl+n
+check("next tab", state()["tabs"][OWNER] != mine)
+key(b"\x10")  # ctrl+p
 check("previous tab", state()["tabs"][OWNER] == mine)
 
-click(29, BOTTOM)
-pump(6)
-check("mode switch", state()["mode"] == "headed", state().get("mode"))
-click(29, BOTTOM)
-pump(6)
-check("mode switch back", state()["mode"] == "headless", state().get("mode"))
+# Pops a real Chrome window up over whatever you're doing, so only on request.
+if os.environ.get("E2E_WINDOW"):
+    click(MODE_COL, 0)
+    pump(6)
+    check("mode switch", state()["mode"] == "headed", state().get("mode"))
+    click(MODE_COL, 0)
+    pump(6)
+    check("mode switch back", state()["mode"] == "headless", state().get("mode"))
 
-click(COLS - 3, BOTTOM)
+os.write(fd, b"\x11")  # ctrl+q
 pump(1)
 done, status = os.waitpid(pid, os.WNOHANG)
 check("close", done == pid)

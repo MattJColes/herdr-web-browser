@@ -1,5 +1,5 @@
 //! Live browser view in a terminal pane (herdr desktop and the herdr TUI): CDP
-//! screencast frames drawn by `render`, an address bar, a clickable toolbar, and
+//! screencast frames drawn by `render`, an address bar with clickable buttons, and
 //! mouse and keys forwarded to the page.
 
 use crate::agent::{self, SendKind};
@@ -77,13 +77,18 @@ fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sen
 }
 
 /// Address-bar editing. Starts with the whole URL selected, like a browser:
-/// typing replaces it, an arrow key or click drops the selection.
+/// typing replaces the selection, an arrow key or click drops it; shift+arrows,
+/// drag, double-click (word) and triple-click (all) select.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UrlEdit {
     buf: Vec<char>,
     cur: usize,
-    all: bool,
+    /// Selection runs from here to `cur`.
+    anchor: Option<usize>,
 }
+
+/// URL separators: word boundaries for double-click and ctrl+w.
+const URL_SEPS: &str = "/ .?&=#:";
 
 #[derive(Debug, PartialEq)]
 pub enum Edit {
@@ -95,26 +100,38 @@ pub enum Edit {
 impl UrlEdit {
     pub fn new(url: &str) -> UrlEdit {
         let buf: Vec<char> = url.chars().collect();
-        UrlEdit { cur: buf.len(), buf, all: !url.is_empty() }
+        UrlEdit { cur: buf.len(), anchor: (!buf.is_empty()).then_some(0), buf }
     }
 
+    fn selection(&self) -> Option<std::ops::Range<usize>> {
+        let a = self.anchor.filter(|&a| a != self.cur)?;
+        Some(a.min(self.cur)..a.max(self.cur))
+    }
+
+    /// Delete the selection, if any; true when something was selected.
     fn take_selection(&mut self) -> bool {
-        let had = self.all;
-        if had {
-            self.buf.clear();
-            self.cur = 0;
-            self.all = false;
-        }
-        had
+        let sel = self.selection();
+        self.anchor = None;
+        let Some(r) = sel else { return false };
+        self.cur = r.start;
+        self.buf.drain(r);
+        true
+    }
+
+    /// Move the cursor; shift extends the selection, otherwise it's dropped.
+    fn move_to(&mut self, to: usize, shift: bool) {
+        self.anchor = if shift { self.anchor.or(Some(self.cur)) } else { None };
+        self.cur = to.min(self.buf.len());
     }
 
     pub fn key(&mut self, k: KeyEvent) -> Edit {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let shift = k.modifiers.contains(KeyModifiers::SHIFT);
         match k.code {
             KeyCode::Esc => return Edit::Cancel,
             KeyCode::Enter => return Edit::Go(self.text()),
-            KeyCode::Char('a') if ctrl => (self.cur, self.all) = (0, false),
-            KeyCode::Char('e') if ctrl => (self.cur, self.all) = (self.buf.len(), false),
+            KeyCode::Char('a') if ctrl => self.move_to(0, false),
+            KeyCode::Char('e') if ctrl => self.move_to(self.buf.len(), false),
             KeyCode::Char('u') if ctrl => {
                 if !self.take_selection() {
                     self.buf.drain(..self.cur);
@@ -127,7 +144,7 @@ impl UrlEdit {
                     while self.cur > 0 && self.buf[self.cur - 1] == ' ' {
                         self.cur -= 1;
                     }
-                    while self.cur > 0 && !"/ .?&=#:".contains(self.buf[self.cur - 1]) {
+                    while self.cur > 0 && !URL_SEPS.contains(self.buf[self.cur - 1]) {
                         self.cur -= 1;
                     }
                     self.buf.drain(self.cur..end);
@@ -149,10 +166,10 @@ impl UrlEdit {
                     self.buf.remove(self.cur);
                 }
             }
-            KeyCode::Left => (self.cur, self.all) = (self.cur.saturating_sub(1), false),
-            KeyCode::Right => (self.cur, self.all) = ((self.cur + 1).min(self.buf.len()), false),
-            KeyCode::Home => (self.cur, self.all) = (0, false),
-            KeyCode::End => (self.cur, self.all) = (self.buf.len(), false),
+            KeyCode::Left => self.move_to(self.cur.saturating_sub(1), shift),
+            KeyCode::Right => self.move_to(self.cur + 1, shift),
+            KeyCode::Home => self.move_to(0, shift),
+            KeyCode::End => self.move_to(self.buf.len(), shift),
             _ => {}
         }
         Edit::Editing
@@ -167,10 +184,34 @@ impl UrlEdit {
         (self.cur + 1).saturating_sub(width.max(1))
     }
 
-    /// Put the cursor under field column `col`.
-    pub fn click(&mut self, col: usize, width: usize) {
-        self.all = false;
-        self.cur = (self.scroll(width) + col).min(self.buf.len());
+    /// Click at field column `col`: 1 places the cursor, 2 selects the word, 3 everything.
+    pub fn click(&mut self, col: usize, width: usize, clicks: u8) {
+        let at = (self.scroll(width) + col).min(self.buf.len());
+        match clicks {
+            1 => self.move_to(at, false),
+            2 => {
+                let sep = |i: usize| URL_SEPS.contains(self.buf[i]);
+                let (mut a, mut b) = (at, at);
+                if at < self.buf.len() && sep(at) {
+                    b += 1; // on a separator: just that character
+                } else {
+                    while a > 0 && !sep(a - 1) {
+                        a -= 1;
+                    }
+                    while b < self.buf.len() && !sep(b) {
+                        b += 1;
+                    }
+                }
+                (self.anchor, self.cur) = (Some(a), b);
+            }
+            _ => (self.anchor, self.cur) = (Some(0), self.buf.len()),
+        }
+    }
+
+    /// Drag to field column `col`, extending the selection from where it started.
+    pub fn drag(&mut self, col: usize, width: usize) {
+        let at = self.scroll(width) + col;
+        self.move_to(at, true);
     }
 }
 
@@ -204,7 +245,7 @@ fn spawn_writer() -> (Sender<Out>, std::thread::JoinHandle<()>) {
                                 flip = !flip;
                                 render::kitty_swap(&mut buf, &b64, id, old, img_cols, rows)
                             }
-                            Renderer::Blocks => render::blocks(&mut buf, &b64, 1, cols, rows),
+                            Renderer::Blocks => render::blocks(&mut buf, &b64, PAGE_TOP, cols, rows),
                         };
                         if drawn.is_err() {
                             buf.extend_from_slice(b"\x1b[0m");
@@ -389,7 +430,7 @@ impl Line {
     }
 
     /// A borderless herdr-style icon button (4 columns) with a hover highlight;
-    /// its name shows in the toolbar while hovered.
+    /// its name shows in the address bar while hovered.
     fn button(&mut self, icon: Icon, act: Act) {
         let x0 = self.col;
         let hot = self.hovered(x0, x0 + 4);
@@ -457,6 +498,9 @@ impl Stream {
 
 /// Header: a gap, back/forward/reload (4 columns each), a gap, then the address field.
 const FIELD_START: u16 = 14;
+/// First row of the page: the address bar, then an empty row so the site doesn't butt
+/// against it (herdr places images on whole rows and ignores Kitty's pixel offsets).
+const PAGE_TOP: u16 = 2;
 
 struct View {
     cfg: Config,
@@ -493,7 +537,8 @@ struct View {
     message: String,
     message_at: Instant,
     url_input: Option<UrlEdit>,
-    last_click: (Instant, u16, u16),
+    /// When, where, and the click count (1-3) of the last left press.
+    last_click: (Instant, u16, u16, u8),
 }
 
 impl View {
@@ -503,7 +548,11 @@ impl View {
 
     fn area() -> (u16, u16) {
         let (c, r) = Self::size();
-        (c, r.saturating_sub(2).max(1))
+        // herdr desktop pads terminals on the left only (~14px); the right gets just the
+        // leftover sliver. Leaving the last column empty roughly balances the page.
+        // ponytail: ±4px of balance, exact centering needs the pane's pixel width.
+        let inset = u16::from(std::env::var_os("HC_TERMINAL_ID").is_some());
+        (c.saturating_sub(inset).max(1), r.saturating_sub(PAGE_TOP).max(1))
     }
 
     fn say(&mut self, msg: impl Into<String>) {
@@ -553,8 +602,10 @@ impl View {
             st.stop();
         }
         let headless = state::load()?.mode == Some(Mode::Headless);
-        if let Some(p) = self.page.as_mut() {
-            let _ = p.activate(); // hidden (background) tabs don't paint, so no frames
+        // Hidden (background) tabs don't paint, so no frames. Headed, activating also
+        // raises Chrome's window over herdr on every reattach, so leave it be there.
+        if headless && let Some(p) = self.page.as_mut() {
+            let _ = p.activate();
         }
         let stop = Arc::new(AtomicBool::new(false));
         let (url, tx, s2, t2) = (chrome::ensure(&self.cfg)?, self.tx.clone(), stop.clone(), target.clone());
@@ -593,12 +644,9 @@ impl View {
         self.title = title;
     }
 
-    fn tag(&self) -> String {
-        let mode = match self.mode {
-            Mode::Headed => "window",
-            Mode::Headless => "headless",
-        };
-        format!(" {} · {mode} ", self.owner.as_deref().unwrap_or("focused tab"))
+    /// Right of the address bar: only the non-obvious state, Chrome popped out into a window.
+    fn tag(&self) -> &'static str {
+        if self.mode == Mode::Headed { " window " } else { "" }
     }
 
     fn images(&self) -> bool {
@@ -609,7 +657,8 @@ impl View {
     fn field(&self) -> (u16, usize) {
         let cols = Self::size().0 as usize;
         let tag = self.tag().chars().count();
-        (FIELD_START + 1, cols.saturating_sub(FIELD_START as usize + tag + 3).max(1))
+        // Caps (2), gap, tag, screenshot + window buttons (8), trailing gap.
+        (FIELD_START + 1, cols.saturating_sub(FIELD_START as usize + tag + 12).max(1))
     }
 
     fn header(&self) -> (Vec<u8>, Vec<Hit>, Vec<Slot>) {
@@ -638,7 +687,7 @@ impl View {
                     let ch = e.buf.get(idx).copied().unwrap_or(' ');
                     let (fg, bg) = if idx == e.cur {
                         (p.field, p.field_fg) // block cursor
-                    } else if e.all && idx < e.buf.len() {
+                    } else if e.selection().is_some_and(|r| r.contains(&idx)) {
                         (p.field_fg, p.selection)
                     } else {
                         (p.field_fg, p.field)
@@ -647,9 +696,9 @@ impl View {
                 }
             }
             None => {
-                let shown = clip(&self.url, width);
+                let (text, fg) = self.field_text(start, width);
+                let shown = clip(&text, width);
                 let pad = width - shown.chars().count();
-                let fg = if self.hovered_field(start, width) { p.fg } else { p.muted };
                 l.text(&format!("{shown}{}", " ".repeat(pad)), fg, p.field);
             }
         }
@@ -661,49 +710,32 @@ impl View {
         }
         l.hits.push(Hit { row: 0, x0, x1: l.col, act: Act::Field });
         l.gap();
-        l.text(&self.tag(), p.dim, p.bar);
+        l.text(self.tag(), p.dim, p.bar);
+        // Send screenshot, plus the window button: the only way to pop Chrome out.
+        // Tabs, page/selection sends and quit stay on their ctrl+ keys.
+        l.button(Icon::Camera, Act::Screenshot);
+        l.button(Icon::Window, Act::Mode);
         l.fill(cols);
         l.finish()
+    }
+
+    /// The idle address field doubles as the status line: a hovered button's name,
+    /// else the latest message for a few seconds, else the URL.
+    fn field_text(&self, start: u16, width: usize) -> (String, Rgb) {
+        let p = self.pal;
+        let hovered = self.hover.and_then(|(c, r)| self.hits.iter().find(|h| h.row == r && (h.x0..h.x1).contains(&c)));
+        if let Some(h) = hovered.filter(|h| h.act != Act::Field) {
+            return (self.describe(h.act).to_string(), p.fg);
+        }
+        if !self.message.is_empty() && self.message_at.elapsed() < Duration::from_secs(6) {
+            let bad = self.message.starts_with("error") || self.message.starts_with("view lost");
+            return (self.message.clone(), if bad { p.err } else { p.ok });
+        }
+        (self.url.clone(), if self.hovered_field(start, width) { p.fg } else { p.muted })
     }
 
     fn hovered_field(&self, start: u16, width: usize) -> bool {
         self.hover.is_some_and(|(c, r)| r == 0 && c >= start && ((c - start) as usize) < width)
-    }
-
-    fn toolbar(&self) -> (Vec<u8>, Vec<Hit>, Vec<Slot>) {
-        let (cols, rows) = Self::size();
-        let row = rows.saturating_sub(1);
-        let p = self.pal;
-        let tabs = format!(" {}/{} ", self.tabs.0, self.tabs.1);
-        let mut l = Line::new(row, self.hover, p, self.images());
-        l.gap();
-        l.button(Icon::TabPrev, Act::TabPrev);
-        l.text(&tabs, p.dim, p.bar);
-        l.button(Icon::TabNext, Act::TabNext);
-        l.text("  ", p.fg, p.bar);
-        for (icon, act) in [(Icon::Send, Act::SendPage), (Icon::Selection, Act::SendSelection), (Icon::Camera, Act::Screenshot), (Icon::Window, Act::Mode)] {
-            l.button(icon, act);
-        }
-        // Right side: the latest message for a few seconds, else the page title.
-        let quit_at = cols.saturating_sub(5);
-        let room = quit_at.saturating_sub(l.col + 2) as usize;
-        let fresh = !self.message.is_empty() && self.message_at.elapsed() < Duration::from_secs(6);
-        let hovered = self.hover.and_then(|(c, r)| self.hits.iter().find(|h| h.row == r && (h.x0..h.x1).contains(&c)));
-        let (text, fg) = if let Some(h) = hovered {
-            (self.describe(h.act).to_string(), p.fg)
-        } else if fresh {
-            let bad = self.message.starts_with("error") || self.message.starts_with("view lost");
-            (self.message.clone(), if bad { p.err } else { p.ok })
-        } else {
-            (self.title.clone(), p.dim)
-        };
-        let text = clip(&text, room);
-        l.fill(quit_at.saturating_sub(text.chars().count() as u16 + 1));
-        l.text(&text, fg, p.bar);
-        l.fill(quit_at);
-        l.button(Icon::Close, Act::Quit);
-        l.fill(cols);
-        l.finish()
     }
 
     /// What a control does, shown while it's hovered.
@@ -751,15 +783,11 @@ impl View {
     }
 
     fn draw_chrome(&mut self) -> R<()> {
-        let (h, mut hits, mut slots) = self.header();
-        let (t, th, ts) = self.toolbar();
-        hits.extend(th);
-        slots.extend(ts);
+        let (h, hits, slots) = self.header();
         self.hits = hits;
-        let mut out = Vec::with_capacity(h.len() + t.len() + 64 * slots.len() + 16);
+        let mut out = Vec::with_capacity(h.len() + 64 * slots.len() + 16);
         out.extend_from_slice(SYNC_ON.as_bytes());
         out.extend_from_slice(&h);
-        out.extend_from_slice(&t);
         if !slots.is_empty() {
             // Re-place every icon: drop old placements (keeping the images), put new ones.
             for id in chrome_ids() {
@@ -830,11 +858,11 @@ impl View {
         let (c, r) = render::fit(w, h, cols, rows, self.cells.aspect());
         let mut pre = Vec::new();
         if self.frame.is_some_and(|(_, _, pc, pr)| (pc, pr) != (c, r)) {
-            for row in 1..=rows {
+            for row in PAGE_TOP..PAGE_TOP + rows {
                 queue!(pre, cursor::MoveTo(0, row), terminal::Clear(terminal::ClearType::CurrentLine))?;
             }
         }
-        queue!(pre, cursor::MoveTo(0, 1))?;
+        queue!(pre, cursor::MoveTo(0, PAGE_TOP))?;
         let _ = self.out.send(Out::Frame {
             pre,
             b64: data.to_string(),
@@ -853,7 +881,7 @@ impl View {
     /// Terminal cell -> page CSS px, if the cell is on the frame.
     fn to_page(&self, col: u16, row: u16) -> Option<(f64, f64)> {
         let (w, h, c, r) = self.frame?;
-        let y = row.checked_sub(1)?;
+        let y = row.checked_sub(PAGE_TOP)?;
         (col < c && y < r).then(|| ((col as f64 + 0.5) / c as f64 * w, (y as f64 + 0.5) / r as f64 * h))
     }
 
@@ -1002,7 +1030,7 @@ impl View {
             Act::Field => {
                 let (start, width) = self.field();
                 match self.url_input.as_mut() {
-                    Some(e) => e.click(col.saturating_sub(start) as usize, width),
+                    Some(e) => e.click(col.saturating_sub(start) as usize, width, 1),
                     None => self.url_input = Some(UrlEdit::new(&self.url)),
                 }
             }
@@ -1060,15 +1088,34 @@ impl View {
 
     /// Returns false to quit.
     fn on_mouse(&mut self, m: event::MouseEvent) -> R<bool> {
-        let rows = Self::size().1;
-        let on_chrome = m.row == 0 || m.row + 1 == rows;
+        // The spacer row under the address bar belongs to the chrome too.
+        let on_chrome = m.row < PAGE_TOP;
         if matches!(m.kind, MouseEventKind::Moved | MouseEventKind::Drag(_)) {
             self.hover = on_chrome.then_some((m.column, m.row));
         }
+        let mut clicks = 1;
+        if m.kind == MouseEventKind::Down(MouseButton::Left) {
+            let (t, c, r, n) = self.last_click;
+            let again = t.elapsed() < Duration::from_millis(400) && (c, r) == (m.column, m.row);
+            clicks = if again { n % 3 + 1 } else { 1 };
+            self.last_click = (Instant::now(), m.column, m.row, clicks);
+        }
         if on_chrome {
+            let (start, width) = self.field();
+            let col = m.column.saturating_sub(start) as usize;
+            if m.kind == MouseEventKind::Drag(MouseButton::Left)
+                && m.row == 0
+                && let Some(e) = self.url_input.as_mut()
+            {
+                e.drag(col, width);
+            }
             if m.kind == MouseEventKind::Down(MouseButton::Left)
                 && let Some(h) = self.hits.iter().find(|h| h.row == m.row && (h.x0..h.x1).contains(&m.column)).copied()
             {
+                if let (Act::Field, Some(e)) = (h.act, self.url_input.as_mut()) {
+                    e.click(col, width, clicks);
+                    return Ok(true);
+                }
                 return self.act(h.act, m.column);
             }
             return Ok(true);
@@ -1079,9 +1126,6 @@ impl View {
         let Some((x, y)) = self.to_page(m.column, m.row) else { return Ok(true) };
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
-                let (t, c, r) = self.last_click;
-                let clicks = if t.elapsed() < Duration::from_millis(400) && (c, r) == (m.column, m.row) { 2 } else { 1 };
-                self.last_click = (Instant::now(), m.column, m.row);
                 self.mouse("mouseMoved", x, y, 0, 0, 0.0)?;
                 self.mouse("mousePressed", x, y, 1, clicks, 0.0)?;
             }
@@ -1131,7 +1175,7 @@ pub fn run(cfg: Config) -> R<()> {
         message: String::new(),
         message_at: Instant::now(),
         url_input: None,
-        last_click: (Instant::now(), u16::MAX, u16::MAX),
+        last_click: (Instant::now(), u16::MAX, u16::MAX, 0),
     };
     if v.renderer == Renderer::Kitty {
         let _ = v.upload_icons();
@@ -1251,6 +1295,33 @@ mod tests {
     }
 
     #[test]
+    fn double_click_selects_the_word_under_it() {
+        let mut e = UrlEdit::new("https://example.com/path");
+        e.click(10, 80, 2); // inside "example"
+        e.key(k(KeyCode::Char('x')));
+        assert_eq!(e.text(), "https://x.com/path");
+    }
+
+    #[test]
+    fn triple_click_selects_everything() {
+        let mut e = UrlEdit::new("https://a.com/");
+        e.click(3, 80, 1);
+        e.click(3, 80, 3);
+        e.key(k(KeyCode::Char('x')));
+        assert_eq!(e.text(), "x");
+    }
+
+    #[test]
+    fn drag_and_shift_arrows_extend_the_selection() {
+        let mut e = UrlEdit::new("https://a.com/");
+        e.click(8, 80, 1);
+        e.drag(10, 80); // "a."
+        e.key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)); // "a.c"
+        e.key(k(KeyCode::Backspace));
+        assert_eq!(e.text(), "https://om/");
+    }
+
+    #[test]
     fn ctrl_w_deletes_one_url_segment() {
         let mut e = UrlEdit::new("https://a.com/path");
         e.key(k(KeyCode::End));
@@ -1263,7 +1334,7 @@ mod tests {
         let mut e = UrlEdit::new("abcdefghij");
         e.key(k(KeyCode::End));
         assert_eq!(e.scroll(4), 7); // shows "hij" plus the cursor cell
-        e.click(0, 4);
+        e.click(0, 4, 1);
         assert_eq!(e.cur, 7);
     }
 
@@ -1272,7 +1343,7 @@ mod tests {
         let mut l = Line::new(0, None, Palette::DEFAULT, true);
         l.gap();
         l.button(Icon::Back, Act::Back);
-        l.button(Icon::Send, Act::SendPage);
+        l.button(Icon::Camera, Act::Screenshot);
         let (_, hits, slots) = l.finish();
         assert_eq!((hits[0].x0, hits[0].x1, hits[0].act), (1, 5, Act::Back));
         assert_eq!((hits[1].x0, hits[1].x1), (5, 9));
