@@ -1,0 +1,80 @@
+# herdr-browser: a shared Chromium for herdr agents. Agents drive it with the
+# `herdr-browser` CLI; pages, selections and screenshots flow back to agents
+# through `herdr agent prompt` (herdr actions, the status pane, or the
+# in-browser extension via Chrome native messaging).
+
+id = "herdr-browser"
+name = "herdr-browser"
+version = "0.1.0"
+description = "Chromium for herdr agents: drive it from the CLI, send pages and selections back to an agent."
+min_herdr_version = "0.9.0"
+platforms = ["macos", "linux"]
+
+[[build]]
+command = ["cargo", "build", "--release"]
+
+[[panes]]
+id = "browser"
+title = "Browser"
+placement = "split"
+command = ["./target/release/herdr-browser", "pane"]
+
+# Opened by a send when the target agent is ambiguous; the choice becomes sticky.
+[[panes]]
+id = "picker"
+title = "Send to agent"
+placement = "popup"
+width = "70%"
+height = 14
+command = ["./target/release/herdr-browser", "picker"]
+
+[[actions]]
+id = "open"
+title = "Browser: open"
+description = "Start the browser and open its status pane."
+command = ["/bin/sh", "-c", "./target/release/herdr-browser start && exec \"$HERDR_BIN_PATH\" plugin pane open --plugin herdr-browser --entrypoint browser"]
+
+[[actions]]
+id = "toggle-mode"
+title = "Browser: toggle headed/headless"
+description = "Relaunch the browser in the other mode, keeping tabs."
+command = ["./target/release/herdr-browser", "mode"]
+
+[[actions]]
+id = "send-page"
+title = "Browser: send page to agent"
+description = "Send the current tab's text to an agent."
+command = ["./target/release/herdr-browser", "send", "page"]
+
+[[actions]]
+id = "send-selection"
+title = "Browser: send selection to agent"
+description = "Send the selected text in the current tab to an agent."
+command = ["./target/release/herdr-browser", "send", "selection"]
+
+[[actions]]
+id = "send-screenshot"
+title = "Browser: send screenshot to agent"
+description = "Screenshot the current tab and send its file path to an agent."
+command = ["./target/release/herdr-browser", "send", "screenshot"]
+
+[[actions]]
+id = "stop"
+title = "Browser: stop"
+description = "Close the browser."
+command = ["./target/release/herdr-browser", "stop"]
+
+[[actions]]
+id = "install-cli"
+title = "Browser: install CLI"
+description = "Symlink herdr-browser into ~/.local/bin so agents can call it."
+command = ["./target/release/herdr-browser", "install-cli"]
+
+# Each pane owns a tab: close it with the pane, follow the pane when it moves.
+[[events]]
+on = "pane.closed"
+command = ["./target/release/herdr-browser", "on-pane-closed"]
+
+[[events]]
+on = "pane.moved"
+command = ["./target/release/herdr-browser", "on-pane-moved"]
