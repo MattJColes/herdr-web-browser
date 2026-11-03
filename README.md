@@ -51,7 +51,7 @@ From herdr's [plugin marketplace](https://herdr.dev/plugins/), in the herdr term
 herdr plugin install MattJColes/herdr-web-browser   # builds it with cargo, so you need Rust
 ```
 
-herdr puts the `herdr-web-browser` command on your PATH each time it starts. Then run `herdr-web-browser install-browser` and `herdr-web-browser install-agents` (both also appear as **Browser:** actions), If herdr desktop is installed, the first start also runs `herdr-web-browser install-desktop` for you. They're explained below.
+Each time herdr starts it puts the `herdr-web-browser` command on your PATH and runs `herdr-web-browser install-agents`. The first start also downloads Chrome for Testing in the background (`install-browser`) and, if herdr desktop is installed, runs `install-desktop`. All of them also appear as **Browser:** actions and are explained below.
 
 Or from source:
 

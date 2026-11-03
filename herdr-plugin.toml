@@ -14,6 +14,7 @@ platforms = ["macos", "linux"]
 command = ["cargo", "build", "--release"]
 
 # Put `herdr-web-browser` on PATH (~/.local/bin) so agents can call it; replaces its own symlink.
+# Also runs install-agents, and install-browser / install-desktop the first time.
 [[startup]]
 command = ["./target/release/herdr-web-browser", "install-cli"]
 
