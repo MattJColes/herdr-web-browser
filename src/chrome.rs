@@ -127,7 +127,10 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
         .args(["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"])
         // Lets us load our unpacked extension over CDP (branded Chrome ignores --load-extension).
         .arg("--enable-unsafe-extension-debugging")
-        .args(["--no-first-run", "--no-default-browser-check", "--hide-crash-restore-bubble"]);
+        .args(["--no-first-run", "--no-default-browser-check", "--hide-crash-restore-bubble"])
+        // With some profiles Chrome counts its headless windows as occluded after ~1s and
+        // stops painting them, which freezes the live view on its first frame.
+        .arg("--disable-backgrounding-occluded-windows");
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
@@ -199,11 +202,12 @@ fn bring_to_front(pid: u32) {
 #[cfg(not(target_os = "macos"))]
 fn bring_to_front(_pid: u32) {}
 
-/// Running browser's endpoint, starting one in the last-used mode if needed.
+/// Running browser's endpoint, starting a headless one if needed: a window only
+/// appears when the user asks for one (`mode headed`, the Window button).
 pub fn ensure(cfg: &Config) -> R<String> {
     match endpoint() {
         Some(u) => Ok(u),
-        None => launch(state::load()?.mode.unwrap_or_default(), cfg),
+        None => launch(Mode::Headless, cfg),
     }
 }
 
@@ -231,7 +235,7 @@ pub fn stop() -> R<bool> {
 /// Relaunch in `mode`, reopening every tab and keeping pane ownership.
 pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
     let Some(url) = endpoint() else {
-        state::update(|s| s.mode = Some(mode))?;
+        launch(mode, cfg)?;
         return Ok(());
     };
     let mut c = Cdp::connect(&url)?;
