@@ -1,11 +1,31 @@
 {
   "manifest_version": 3,
   "name": "herdr-web-browser",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Send pages, selections, links and screenshots to a herdr agent, and record console output and requests for it.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv1WzrCIL2xEBAdJgPp98Vw3rUECHUm9NbEHzlvhqlY9PuknnIQbIXA2JaOzBJhS8+A2USPQaBlH9PRoasDKqZr3BKz05sZ7l8AHEIufnne9bDwj8M31A3VWAWIvI8G/ELpHW48vAGe4/aLz04fe5jotZ46uBCsCYaYRRF7Cn3IlGr/O8t/j2GUWVsQrTrrUVS2VQIMUalOSyBe8JaRPbFKJamaWO6i6EVxTPlyaA8zl1yezZsiKu0FyF3JniE0d1krzlafPU4h2Bdv98EPjF7i5mD9QEJzTFC8lZfQthe4lzWahYUsNykSJU4nIprzTRbOVvQ3StSgwKYbxa1A98AwIDAQAB",
-  "permissions": ["contextMenus", "nativeMessaging", "scripting", "activeTab"],
-  "background": { "service_worker": "background.js" },
-  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["recorder.js"], "run_at": "document_start", "world": "MAIN" }],
-  "action": { "default_title": "Send page to herdr agent" }
+  "permissions": [
+    "contextMenus",
+    "nativeMessaging",
+    "scripting",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "recorder.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "action": {
+    "default_title": "Send page to herdr agent"
+  }
 }
