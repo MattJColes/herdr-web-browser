@@ -1,6 +1,6 @@
 [package]
 name = "herdr-web-browser"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 description = "Chromium for herdr agents: a CLI to drive it, and a bridge to push page data back to an agent."
 license = "MIT"

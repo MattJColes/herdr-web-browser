@@ -5,7 +5,7 @@
 
 id = "herdr-web-browser"
 name = "herdr-web-browser"
-version = "0.1.0" # x-release-please-version
+version = "1.0.0" # x-release-please-version
 description = "A web browser beside your coding agent: previews, page debugging (console, network) and screenshots for agents; ctrl-click localhost links to open them here."
 min_herdr_version = "0.9.0"
 platforms = ["macos", "linux"]
