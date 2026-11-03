@@ -601,6 +601,21 @@ fn run(cli: Cli) -> R<()> {
                     Err(e) => msg = format!("{msg}\nherdr desktop setup failed: {e}; run `herdr-web-browser install-desktop`"),
                 }
             }
+            // Every start, so agents get the current skill after an update; it only rewrites its own section.
+            match agent_setup::install_agents() {
+                Ok(m) => msg = format!("{msg}\n{m}"),
+                Err(e) => msg = format!("{msg}\nagent setup skipped: {e}"),
+            }
+            if browser_install::installed().is_none() {
+                // ~200 MB download: run it in the background so herdr's startup isn't held up.
+                std::process::Command::new(std::env::current_exe()?)
+                    .arg("install-browser")
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()?;
+                msg = format!("{msg}\ndownloading Chrome for Testing in the background");
+            }
             print(j, msg.clone(), json!({ "message": msg }));
         }
         Cmd::InstallDesktop => {
