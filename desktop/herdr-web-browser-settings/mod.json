@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Browser settings", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 560, "height": 0.75 } }
+{ "place": "none", "title": "Browser settings", "overlay": { "kind": "dialog", "width": 560, "height": 620 } }

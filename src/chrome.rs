@@ -38,6 +38,10 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
     if let Some(p) = &cfg.chrome_path {
         return if p.is_file() { Ok(p.clone()) } else { Err(format!("chrome_path {} does not exist", p.display()).into()) };
     }
+    // Its own app, so it can't take over the user's Chrome (see browser_install).
+    if let Some(p) = crate::browser_install::installed() {
+        return Ok(p);
+    }
     #[cfg(target_os = "macos")]
     {
         let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join("Applications");
@@ -207,8 +211,20 @@ fn bring_to_front(_pid: u32) {}
 pub fn ensure(cfg: &Config) -> R<String> {
     match endpoint() {
         Some(u) => Ok(u),
+        None if restarting() => Err("the browser is restarting".into()),
         None => launch(Mode::Headless, cfg),
     }
+}
+
+/// Held while `restart` has the browser stopped, so live views (which reconnect every
+/// second) don't start another one mid-swap. Ignored after a few minutes, should a
+/// restart die holding it.
+fn restart_lock() -> PathBuf {
+    state::state_dir().join("restarting")
+}
+
+fn restarting() -> bool {
+    fs::metadata(restart_lock()).and_then(|m| m.modified()).is_ok_and(|t| t.elapsed().unwrap_or_default() < Duration::from_secs(600))
 }
 
 /// Chrome removes the profile's SingletonLock symlink on clean exit.
@@ -244,6 +260,14 @@ pub fn switch_mode(mode: Mode, cfg: &Config) -> R<()> {
 /// Stop the browser, run `between` (e.g. to change its profile), then relaunch in `mode`
 /// with every tab reopened and pane ownership kept. Not running: just `between`.
 pub fn restart(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> R<()> {
+    fs::create_dir_all(state::state_dir())?;
+    fs::write(restart_lock(), "")?;
+    let result = restart_locked(mode, cfg, between);
+    let _ = fs::remove_file(restart_lock());
+    result
+}
+
+fn restart_locked(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> R<()> {
     let Some(url) = endpoint() else { return between() };
     let mut c = Cdp::connect(&url)?;
     let owners = state::load()?.tabs;

@@ -3,6 +3,7 @@
 
 mod agent;
 mod agent_setup;
+mod browser_install;
 mod cdp;
 mod chrome;
 mod debug;
@@ -138,6 +139,8 @@ enum Cmd {
     InstallDesktop,
     /// Teach Claude Code, Codex, OpenCode and Pi to use this browser for web pages, in every project.
     InstallAgents,
+    /// Download Chrome for Testing for this browser, so it never takes over your own Chrome app.
+    InstallBrowser,
     /// Copy your Google Chrome sign-ins (cookies) into this browser. Every agent can then use
     /// those sites as you. Pass sites (`github.com`), --all, or --list to see what's there.
     ImportLogins {
@@ -538,6 +541,17 @@ fn run(cli: Cli) -> R<()> {
             let n = logins::import(&cfg, &profile, &sites)?;
             let what = if all { "every site".to_string() } else { sites.join(", ") };
             print(j, format!("imported {n} cookies for {what} from Chrome"), json!({ "cookies": n, "sites": sites }));
+        }
+        Cmd::InstallBrowser => {
+            // Restart around the swap so a running browser comes back on the new copy, tabs kept.
+            let mode = state::load()?.mode.unwrap_or_default();
+            let mut version = String::new();
+            chrome::restart(mode, &cfg, || {
+                version = browser_install::install()?;
+                Ok(())
+            })?;
+            let msg = format!("using Chrome for Testing {version}");
+            print(j, msg.clone(), json!({ "version": version }));
         }
         Cmd::InstallAgents => {
             let msg = agent_setup::install_agents()?;
