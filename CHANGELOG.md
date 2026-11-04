@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.0...v1.3.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **desktop:** re-point desktop mods at the running build ([b2c7ffd](https://github.com/MattJColes/herdr-web-browser/commit/b2c7ffd95229c38e66c6214f51e021a3ec2b2d4c))
+* **desktop:** Re-point desktop mods at the running build ([3751fe1](https://github.com/MattJColes/herdr-web-browser/commit/3751fe1c4d6e03557a0da4ab70803d327eab0377))
+
 ## [1.3.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.2.0...v1.3.0) (2026-11-03)
 
 
