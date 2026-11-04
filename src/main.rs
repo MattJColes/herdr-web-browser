@@ -311,6 +311,12 @@ fn desktop_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"))
 }
 
+/// Whether herdr desktop's installed menu mod launches `exe` (false when it isn't installed).
+fn desktop_runs(home: &std::path::Path, exe: &std::path::Path) -> bool {
+    let js = std::fs::read_to_string(home.join("mods").join(DESKTOP_MODS[0]).join("main.js")).unwrap_or_default();
+    serde_json::to_string(&exe.display().to_string()).is_ok_and(|bin| js.contains(&bin))
+}
+
 /// Copy the desktop mods into Herdr.app's home with this binary's path baked in, then check them.
 fn install_desktop() -> R<String> {
     let exe = std::fs::canonicalize(std::env::current_exe()?)?;
@@ -594,8 +600,10 @@ fn run(cli: Cli) -> R<()> {
         }
         Cmd::InstallCli => {
             let mut msg = install_cli()?;
-            // herdr runs this at startup: set up herdr desktop the first time we find it.
-            if desktop_home().is_dir() && !desktop_home().join("mods").join(DESKTOP_MODS[0]).is_dir() {
+            // herdr runs this at startup: (re)install herdr desktop's mods unless they already run this
+            // binary, so a dev build (or an old install) never stays wired in after the plugin updates.
+            let exe = std::fs::canonicalize(std::env::current_exe()?)?;
+            if desktop_home().is_dir() && !desktop_runs(&desktop_home(), &exe) {
                 match install_desktop() {
                     Ok(m) => msg = format!("{msg}\n{m}"),
                     Err(e) => msg = format!("{msg}\nherdr desktop setup failed: {e}; run `herdr-web-browser install-desktop`"),
@@ -738,6 +746,20 @@ mod tests {
         let ev = json!({ "event": "pane.moved", "data": { "previous_pane_id": "w1:p2", "pane": { "pane_id": "w2:p5" } } });
         assert_eq!(find(&ev, "previous_pane_id"), Some(&json!("w1:p2")));
         assert_eq!(find(&ev, "pane").and_then(|p| p["pane_id"].as_str()), Some("w2:p5"));
+    }
+
+    #[test]
+    fn desktop_runs_only_the_baked_binary() {
+        let home = std::env::temp_dir().join(format!("hwb-desktop-{}", std::process::id()));
+        let exe = std::path::Path::new("/opt/plugin/target/release/herdr-web-browser");
+        assert!(!desktop_runs(&home, exe), "missing mods means not installed");
+        let dir = home.join("mods").join(DESKTOP_MODS[0]);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("main.js"), r#"const BIN = "/dev/checkout/target/release/herdr-web-browser";"#).unwrap();
+        assert!(!desktop_runs(&home, exe), "mods baked with another binary are stale");
+        std::fs::write(dir.join("main.js"), r#"const BIN = "/opt/plugin/target/release/herdr-web-browser";"#).unwrap();
+        assert!(desktop_runs(&home, exe));
+        std::fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]
