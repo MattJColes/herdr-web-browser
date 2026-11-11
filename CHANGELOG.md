@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.2](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.1...v1.3.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* release patch versions for dependency bumps ([15a5f7e](https://github.com/MattJColes/herdr-web-browser/commit/15a5f7e93ee9afd155610fbdd86fa4c82f36c130))
+* release patch versions for dependency bumps ([f24027a](https://github.com/MattJColes/herdr-web-browser/commit/f24027a1d784c66617cba16d294ee2b3462c8a0d))
+
 ## [1.3.1](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.0...v1.3.1) (2026-11-04)
 
 
