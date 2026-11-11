@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # "fix(deps)" so release-please cuts a patch release for dependency bumps; actions stay chore.
+    commit-message:
+      prefix: fix
+      include: scope
     groups:
       # Patch and minor bumps arrive as one PR; majors stay separate for a closer look.
       cargo-minor-and-patch:
