@@ -52,6 +52,9 @@ pub struct Config {
     pub view_renderer: Option<String>,
     /// What a new Browser (herdr desktop's + menu) opens on.
     pub home_page: Option<String>,
+    /// Live view in herdr desktop: the screen's scale (2 on a HiDPI screen), when it isn't
+    /// detected (Linux).
+    pub scale: Option<f64>,
 }
 
 pub const DEFAULT_MAX_CHARS: usize = 20_000;
