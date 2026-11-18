@@ -239,8 +239,15 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
             }
             let v = herdr(&args)?;
             let pane = v.pointer("/result/pane/pane_id").and_then(Value::as_str).ok_or("pane split returned no pane")?;
-            let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
-            let cmd = argv.iter().map(q).collect::<Vec<_>>().join(" ");
+            // `pane run` types into the pane's shell: POSIX sh, or PowerShell (herdr's default) on Windows.
+            // ponytail: a cmd.exe or Git Bash pane on Windows won't parse this; detect the shell if users hit it.
+            let cmd = if cfg!(windows) {
+                let q = |a: &String| format!("'{}'", a.replace('\'', "''"));
+                format!("& {}", argv.iter().map(q).collect::<Vec<_>>().join(" "))
+            } else {
+                let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
+                argv.iter().map(q).collect::<Vec<_>>().join(" ")
+            };
             herdr(&["pane", "run", pane, &cmd])?;
             Ok(format!("live view in pane {pane} (needs a terminal with Kitty graphics)"))
         }
