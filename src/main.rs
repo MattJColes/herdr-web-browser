@@ -691,6 +691,8 @@ fn run(cli: Cli) -> R<()> {
             }
             if browser_install::available() && browser_install::installed().is_none() {
                 // ~200 MB download: run it in the background so herdr's startup isn't held up.
+                #[cfg(windows)]
+                chrome::keep_std_handles_from_children();
                 std::process::Command::new(std::env::current_exe()?)
                     .arg("install-browser")
                     .stdin(std::process::Stdio::null())

@@ -149,6 +149,27 @@ fn has_display() -> bool {
     cfg!(any(target_os = "macos", windows)) || ["DISPLAY", "WAYLAND_DISPLAY"].iter().any(|v| std::env::var_os(v).is_some_and(|x| !x.is_empty()))
 }
 
+/// Windows children inherit every inheritable handle, not just the stdio they're given, so a
+/// long-lived child (Chrome, a background download) would hold our caller's stdout pipe open
+/// and an agent reading our output would never see it end. Stop our own stdio from leaking;
+/// `Stdio::inherit` still works, as std duplicates the handle for that child.
+#[cfg(windows)]
+pub fn keep_std_handles_from_children() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetStdHandle(which: u32) -> *mut std::ffi::c_void;
+        fn SetHandleInformation(handle: *mut std::ffi::c_void, mask: u32, flags: u32) -> i32;
+    }
+    const HANDLE_FLAG_INHERIT: u32 = 1;
+    // STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are -10, -11, -12 as DWORD.
+    for which in [-10i32, -11, -12] {
+        // SAFETY: plain Win32 calls on this process's own std handles; failure (no console, null handle) is harmless.
+        unsafe {
+            SetHandleInformation(GetStdHandle(which as u32), HANDLE_FLAG_INHERIT, 0);
+        }
+    }
+}
+
 pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     let mode = if mode == Mode::Headed && !has_display() { Mode::Headless } else { mode };
     let chrome = find_chrome(cfg)?;
@@ -180,6 +201,7 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        keep_std_handles_from_children();
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
