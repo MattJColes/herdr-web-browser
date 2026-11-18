@@ -96,18 +96,26 @@ pub fn port() -> Option<u16> {
     parse_port_file(&s).map(|(p, _)| p)
 }
 
-/// Chrome launches the host as `<path> <origin>`, so `path` must be a wrapper
-/// that adds our subcommand.
+/// Chrome launches the host as `<path> <origin>` (on Windows also `--parent-window=N`),
+/// so `path` must be a wrapper that adds our subcommand.
 fn install_native_host(profile: &Path) -> R<()> {
     let exe = state::own_exe()?;
-    let wrapper = state::state_dir().join("native-host.sh");
-    let quoted = exe.display().to_string().replace('\'', r"'\''");
-    fs::write(&wrapper, format!("#!/bin/sh\nexec '{quoted}' native-host \"$@\"\n"))?;
     #[cfg(unix)]
-    {
+    let wrapper = {
         use std::os::unix::fs::PermissionsExt;
+        let wrapper = state::state_dir().join("native-host.sh");
+        let quoted = exe.display().to_string().replace('\'', r"'\''");
+        fs::write(&wrapper, format!("#!/bin/sh\nexec '{quoted}' native-host \"$@\"\n"))?;
         fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
-    }
+        wrapper
+    };
+    #[cfg(windows)]
+    let wrapper = {
+        let wrapper = state::state_dir().join("native-host.cmd");
+        let quoted = exe.display().to_string().replace('%', "%%");
+        fs::write(&wrapper, format!("@\"{quoted}\" native-host %*\r\n"))?;
+        wrapper
+    };
     let dir = profile.join("NativeMessagingHosts");
     fs::create_dir_all(&dir)?;
     let manifest = json!({
@@ -117,8 +125,24 @@ fn install_native_host(profile: &Path) -> R<()> {
         "type": "stdio",
         "allowed_origins": [format!("chrome-extension://{EXTENSION_ID}/")],
     });
-    fs::write(dir.join(format!("{NATIVE_HOST}.json")), serde_json::to_vec_pretty(&manifest)?)?;
+    let manifest_path = dir.join(format!("{NATIVE_HOST}.json"));
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    // Chrome on Windows finds hosts through the registry, not the profile folder.
+    #[cfg(windows)]
+    for key in native_host_keys() {
+        let path = manifest_path.display().to_string();
+        crate::host::run("reg", &["add", &key, "/ve", "/t", "REG_SZ", "/d", &path, "/f"])?;
+    }
     Ok(())
+}
+
+/// Per-user registry keys that point each Chromium browser at our native host manifest.
+#[cfg(windows)]
+pub fn native_host_keys() -> Vec<String> {
+    [r"Google\Chrome", "Chromium", r"Microsoft\Edge", r"BraveSoftware\Brave-Browser"]
+        .iter()
+        .map(|b| format!(r"HKCU\Software\{b}\NativeMessagingHosts\{NATIVE_HOST}"))
+        .collect()
 }
 
 fn has_display() -> bool {

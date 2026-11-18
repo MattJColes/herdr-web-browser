@@ -53,6 +53,12 @@ pub fn run(purge: bool) -> R<Vec<String>> {
         let _ = std::fs::remove_file(state::root_note(&link));
         done.push(format!("removed {}", link.display()));
     }
+    #[cfg(windows)]
+    for key in chrome::native_host_keys() {
+        if crate::host::run("reg", &["delete", &key, "/f"]).is_ok() {
+            done.push(format!("removed registry key {key}"));
+        }
+    }
     if purge && state::state_dir().is_dir() {
         std::fs::remove_dir_all(state::state_dir())?;
         done.push(format!("deleted {} (profile, Chrome for Testing, screenshots)", state::state_dir().display()));
