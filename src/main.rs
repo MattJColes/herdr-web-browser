@@ -422,7 +422,8 @@ fn install_desktop() -> R<String> {
     Ok(format!("installed {} into {}; {key}", DESKTOP_MODS.join(", "), home.join("mods").display()))
 }
 
-pub(crate) const MENU_KEY: &str = "cmd-shift-b";
+// herdr desktop on Windows uses ctrl shortcuts, and ctrl-shift-b toggles its sidebar.
+pub(crate) const MENU_KEY: &str = if cfg!(windows) { "ctrl-alt-b" } else { "cmd-shift-b" };
 pub(crate) const MENU_ACTION: &str = "mod.open:herdr-web-browser";
 
 #[derive(Debug, PartialEq)]

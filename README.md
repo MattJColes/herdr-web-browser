@@ -76,7 +76,7 @@ Then set it up for the herdr you use.
 herdr-web-browser install-desktop
 ```
 
-This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon, and binds `cmd-shift-b` to open the browser's menu in `~/.config/herdr-app/keys.json`. It leaves the shortcut alone if you already bound the menu to another key or use `cmd-shift-b` for something else. herdr runs it automatically the first time it starts with herdr desktop installed.
+This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon, and binds `cmd-shift-b` (`ctrl-alt-b` on Windows) to open the browser's menu in `~/.config/herdr-app/keys.json`. It leaves the shortcut alone if you already bound the menu to another key or use that shortcut for something else. herdr runs it automatically the first time it starts with herdr desktop installed.
 
 **herdr (terminal app)**
 
