@@ -305,7 +305,7 @@ const DESKTOP_MODS: &[&str] =
     &["herdr-web-browser", "herdr-web-browser-picker", "herdr-web-browser-toast", "herdr-web-browser-theme", "herdr-web-browser-settings"];
 
 /// Herdr.app's home folder (mods, programs.json).
-fn desktop_home() -> PathBuf {
+pub(crate) fn desktop_home() -> PathBuf {
     std::env::var_os("HERDR_APP_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"))

@@ -68,12 +68,37 @@ pub fn parse_kitty_reply(buf: &[u8]) -> bool {
 /// herdr desktop draws terminals itself while herdr-core answers `CSI 16 t` with a fixed
 /// 10x20, so derive cells from the app's font size (cells measured 8.4x22 px at 14 pt),
 /// in device pixels so Retina screens get 2x frames rather than 1x ones stretched.
-fn desktop_cells() -> Option<Cells> {
+fn desktop_cells(cfg: &Config) -> Option<Cells> {
     let st = crate::host::run("herdr-app", &["status"]).ok()?;
-    let fs = st["font_size"].as_f64()? * st["zoom"].as_f64().unwrap_or(1.0);
-    let scale = screen_scale().unwrap_or(1.0);
-    // Kitty images now sit on the same fractional grid as text, so image columns = text columns.
-    Some(Cells::from_px(fs * 0.6 * scale, fs * 22.0 / 14.0 * scale))
+    // `font_size` is what the window draws, zoom included: font 14 at zoom 1.4 reports 19.6.
+    let fs = st["font_size"].as_f64()?;
+    let settings = std::fs::read_to_string(crate::desktop_home().join("settings.json")).ok();
+    let setting = |key: &str| {
+        settings
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            .and_then(|v| v[key].as_f64())
+            .unwrap_or(1.0)
+            .clamp(0.8, 2.0)
+    };
+    let scale = cfg.scale.filter(|s| (0.5..=4.0).contains(s)).or_else(screen_scale).unwrap_or(1.0);
+    Some(desktop_cell_size(fs, setting("terminal_line_height"), setting("terminal_cell_width"), scale, cfg!(target_os = "macos")))
+}
+
+/// herdr desktop's terminal cell in device px, from its font size (zoom included), its
+/// `terminal_line_height` / `terminal_cell_width` multipliers and the screen's scale.
+/// The device pixel ratio is the screen's scale, never guessed from the cell size: a zoomed
+/// or large font has tall cells on a 1x screen too.
+pub fn desktop_cell_size(font_size: f64, line_height: f64, cell_width: f64, scale: f64, macos: bool) -> Cells {
+    let (w, h) = if macos {
+        // Measured on macOS with herdr's default JetBrains Mono.
+        (font_size * 0.6 * cell_width * scale, font_size * 22.0 / 14.0 * line_height * scale)
+    } else {
+        // Linux draws whole-pixel cells from the font's advance (0.6 em) and line height
+        // (1.32 em for JetBrains Mono): 8 x 18 px at 14 px, measured on a 1x screen.
+        ((font_size * 0.6 * cell_width * scale).round(), (font_size * 1.32 * line_height * scale).round())
+    };
+    Cells { w, h, dpr: scale, img_w: w }
 }
 
 /// The screen's backing scale (2 on Retina); herdr desktop only reports logical sizes.
@@ -133,7 +158,7 @@ fn query_terminal() -> (Cells, bool) {
 /// Cell metrics and the renderer to use; `view_renderer` / `cell_aspect` override.
 pub fn detect(cfg: &Config) -> (Cells, Renderer) {
     let desktop = std::env::var_os("HC_TERMINAL_ID").is_some();
-    let (mut cells, kitty) = match desktop.then(desktop_cells).flatten() {
+    let (mut cells, kitty) = match desktop.then(|| desktop_cells(cfg)).flatten() {
         Some(c) => (c, true),
         None => query_terminal(),
     };
@@ -376,6 +401,30 @@ mod tests {
     fn desktop_images_get_extra_columns_for_whole_pixel_cells() {
         let c = Cells { w: 8.4, h: 22.0, dpr: 1.0, img_w: 8.0 };
         assert_eq!(c.img_cols(80), 84); // 80 x 8.4 px = 672 px = 84 x 8 px
+    }
+
+    #[test]
+    fn linux_desktop_cells_match_what_herdr_draws() {
+        // herdr desktop on Linux, JetBrains Mono 14 at zoom 1: 235 columns span 1880 px,
+        // 49 rows span 882 px.
+        let c = desktop_cell_size(14.0, 1.0, 1.0, 1.0, false);
+        assert_eq!((c.w, c.h, c.dpr), (8.0, 18.0, 1.0));
+    }
+
+    #[test]
+    fn zoom_is_not_mistaken_for_a_retina_screen() {
+        // Zoom 1.4 makes cells taller than 28 px; the screen is still 1x.
+        let c = desktop_cell_size(19.6, 1.0, 1.0, 1.0, false);
+        assert_eq!(c.dpr, 1.0);
+        assert_eq!((c.w, c.h), (12.0, 26.0));
+    }
+
+    #[test]
+    fn desktop_cells_follow_scale_and_multipliers() {
+        let c = desktop_cell_size(14.0, 1.2, 1.0, 2.0, false);
+        assert_eq!((c.w, c.h, c.dpr), (17.0, 44.0, 2.0));
+        let mac = desktop_cell_size(14.0, 1.0, 1.0, 2.0, true);
+        assert_eq!((mac.w, mac.h, mac.dpr), (16.8, 44.0, 2.0));
     }
 
     #[test]
