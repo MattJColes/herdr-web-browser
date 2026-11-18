@@ -59,7 +59,7 @@ Or from source:
 git clone https://github.com/MattJColes/herdr-web-browser
 cd herdr-web-browser
 cargo build --release
-./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin (a copy on Windows)
+./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin (a copy on Windows, added to your PATH)
 herdr-web-browser install-browser                    # downloads Chrome for Testing (~200 MB) for it to use
 herdr-web-browser install-agents                     # agents use it for web previews in every project
 ```

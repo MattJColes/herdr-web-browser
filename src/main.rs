@@ -291,6 +291,31 @@ fn on_pane_moved() -> R<()> {
     Ok(())
 }
 
+/// Add `dir` to the user's PATH (HKCU\Environment), as rustup and uv do: Windows has no
+/// ~/.local/bin convention, so agents couldn't run the CLI otherwise. Keeps `%VAR%` entries
+/// unexpanded. Returns whether it changed anything.
+#[cfg(windows)]
+fn add_to_user_path(dir: &std::path::Path) -> R<bool> {
+    const SCRIPT: &str = r#"
+$d = $env:HWB_DIR
+$p = (Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+if (($p -split ';') -contains $d) { exit 0 }
+Set-ItemProperty 'HKCU:\Environment' Path ((($p.TrimEnd(';'), $d) -ne '') -join ';') -Type ExpandString
+# Deleting an unset variable is how .NET broadcasts WM_SETTINGCHANGE, so Explorer sees the new PATH.
+[Environment]::SetEnvironmentVariable('HWB_PATH_CHANGED', $null, 'User')
+'added'
+"#;
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .env("HWB_DIR", dir)
+        .stdin(std::process::Stdio::null())
+        .output()?;
+    if !out.status.success() {
+        return Err(format!("could not add {} to PATH: {}", dir.display(), String::from_utf8_lossy(&out.stderr).trim()).into());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim() == "added")
+}
+
 /// Where install-cli puts the CLI: ~/.local/bin/herdr-web-browser (.exe on Windows).
 pub(crate) fn cli_path() -> R<PathBuf> {
     Ok(state::home().ok_or("no home folder")?.join(".local").join("bin").join(format!("herdr-web-browser{}", std::env::consts::EXE_SUFFIX)))
@@ -318,13 +343,28 @@ fn install_cli() -> R<String> {
         if link == exe {
             return Ok(format!("{} is the installed copy; run install-cli from the plugin build", exe.display()));
         }
+        // Clear earlier copies once nothing runs them; the one renamed now may still be running.
+        for old in std::fs::read_dir(&dir)?.flatten().map(|e| e.path()) {
+            if old.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("herdr-web-browser.exe.") && n.ends_with(".old")) {
+                let _ = std::fs::remove_file(old);
+            }
+        }
         if link.exists() {
-            std::fs::rename(&link, link.with_extension("exe.old"))?;
+            std::fs::rename(&link, link.with_extension(format!("exe.{}.old", std::process::id())))?;
         }
         std::fs::copy(&exe, &link)?;
         std::fs::write(state::root_note(&link), state::plugin_root().display().to_string())?;
     }
     let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).any(|p| p == dir);
+    #[cfg(windows)]
+    let hint = if on_path {
+        String::new()
+    } else if add_to_user_path(&dir)? {
+        format!(" (added {} to your PATH; restart herdr and terminals to pick it up)", dir.display())
+    } else {
+        String::new() // already in the user PATH; this process just started before it was added
+    };
+    #[cfg(not(windows))]
     let hint = if on_path { String::new() } else { format!(" (add {} to PATH)", dir.display()) };
     let verb = if cfg!(windows) { "copied" } else { "linked" };
     Ok(format!("{verb} {} -> {}{hint}", link.display(), exe.display()))
