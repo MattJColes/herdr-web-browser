@@ -16,8 +16,15 @@ fn platform() -> R<&'static str> {
         ("macos", "aarch64") => Ok("mac-arm64"),
         ("macos", "x86_64") => Ok("mac-x64"),
         ("linux", "x86_64") => Ok("linux64"),
+        ("windows", "x86_64") => Ok("win64"),
         (os, arch) => Err(format!("Chrome for Testing has no build for {os}/{arch}; set chrome_path instead").into()),
     }
+}
+
+/// Whether Chrome for Testing has a build for this machine (Windows on ARM has none:
+/// it uses the installed Chrome or Edge).
+pub fn available() -> bool {
+    platform().is_ok()
 }
 
 fn dir() -> PathBuf {
@@ -28,9 +35,21 @@ fn dir() -> PathBuf {
 pub fn installed() -> Option<PathBuf> {
     let p = platform().ok()?;
     let base = dir().join(format!("chrome-{p}"));
-    let exe =
-        if p.starts_with("mac") { base.join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing") } else { base.join("chrome") };
+    let exe = match p {
+        "mac-arm64" | "mac-x64" => base.join("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
+        "win64" => base.join("chrome.exe"),
+        _ => base.join("chrome"),
+    };
     exe.is_file().then_some(exe)
+}
+
+/// Windows' own curl.exe / tar.exe (bsdtar, which unpacks zips), not Git Bash's GNU tar
+/// that may come first on PATH.
+fn system_tool(name: &str) -> PathBuf {
+    match std::env::var_os("SystemRoot") {
+        Some(root) if cfg!(windows) => PathBuf::from(root).join("System32").join(format!("{name}.exe")),
+        _ => PathBuf::from(name),
+    }
 }
 
 fn run(cmd: &mut Command) -> R<Vec<u8>> {
@@ -46,7 +65,7 @@ fn run(cmd: &mut Command) -> R<Vec<u8>> {
 /// The browser must not be running from the old copy while this replaces it.
 pub fn install() -> R<String> {
     let p = platform()?;
-    let index: Value = serde_json::from_slice(&run(Command::new("curl").args(["-fsSL", "--max-time", "30", VERSIONS]))?)?;
+    let index: Value = serde_json::from_slice(&run(Command::new(system_tool("curl")).args(["-fsSL", "--max-time", "30", VERSIONS]))?)?;
     let stable = &index["channels"]["Stable"];
     let version = stable["version"].as_str().ok_or("Chrome for Testing lists no stable version")?;
     let url = stable["downloads"]["chrome"]
@@ -64,8 +83,12 @@ pub fn install() -> R<String> {
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp)?;
     let zip = tmp.join("chrome.zip");
-    run(Command::new("curl").args(["-fsSL", "--max-time", "900", "--retry", "2", "-o"]).arg(&zip).arg(url))?;
-    run(Command::new("unzip").args(["-q", "-o"]).arg(&zip).arg("-d").arg(&tmp))?;
+    run(Command::new(system_tool("curl")).args(["-fsSL", "--max-time", "900", "--retry", "2", "-o"]).arg(&zip).arg(url))?;
+    if cfg!(windows) {
+        run(Command::new(system_tool("tar")).arg("-xf").arg(&zip).arg("-C").arg(&tmp))?;
+    } else {
+        run(Command::new("unzip").args(["-q", "-o"]).arg(&zip).arg("-d").arg(&tmp))?;
+    }
     fs::remove_file(&zip)?;
     fs::write(tmp.join("version"), version)?;
     let _ = fs::remove_dir_all(dir());

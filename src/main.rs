@@ -635,7 +635,7 @@ fn run(cli: Cli) -> R<()> {
                 Ok(m) => msg = format!("{msg}\n{m}"),
                 Err(e) => msg = format!("{msg}\nagent setup skipped: {e}"),
             }
-            if browser_install::installed().is_none() {
+            if browser_install::available() && browser_install::installed().is_none() {
                 // ~200 MB download: run it in the background so herdr's startup isn't held up.
                 std::process::Command::new(std::env::current_exe()?)
                     .arg("install-browser")

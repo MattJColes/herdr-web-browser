@@ -22,7 +22,15 @@ const APP_PATHS: &[&str] = &[
     "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "Brave Browser.app/Contents/MacOS/Brave Browser",
 ];
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+const WIN_PATHS: &[&str] = &[
+    r"Google\Chrome\Application\chrome.exe",
+    r"Chromium\Application\chrome.exe",
+    r"BraveSoftware\Brave-Browser\Application\brave.exe",
+    // Ships with Windows, so the last resort.
+    r"Microsoft\Edge\Application\msedge.exe",
+];
+#[cfg(not(any(target_os = "macos", windows)))]
 const BIN_NAMES: &[&str] = &["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"];
 
 pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
@@ -45,7 +53,16 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
             }
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    for app in WIN_PATHS {
+        for base in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"].iter().filter_map(std::env::var_os) {
+            let p = PathBuf::from(base).join(app);
+            if p.is_file() {
+                return Ok(p);
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     for dir in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
         for name in BIN_NAMES {
             let p = dir.join(name);
