@@ -209,11 +209,12 @@ scale = 2                     # herdr desktop on Linux or Windows: your screen's
 ## Troubleshooting
 
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
+- **The view is low-resolution blocks on Windows.** Outside herdr desktop the view can't ask the terminal whether it shows images, so it draws blocks. If yours does (WezTerm, or herdr running inside herdr desktop), set `view_renderer = "kitty"`.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font on macOS, 2.25 on Linux).
 - **The page is blurry in herdr desktop on Linux or Windows.** Set `scale` to your screen's scale (2 on a HiDPI screen, 1.5 for 150%). macOS detects it.
 - **Clicking Chrome in the Dock does nothing.** The browser is using your own Chrome. Run `herdr-web-browser install-browser`.
 - **"No Chrome found".** Run `herdr-web-browser install-browser`, or set `chrome_path`.
-- **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden.
+- **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden. On Windows the window opens behind the one you're using; click it in the taskbar.
 
 ## For agents
 
