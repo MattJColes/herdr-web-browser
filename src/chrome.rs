@@ -191,6 +191,11 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
+    // Edge on Windows signs a new profile in to the Windows account and turns on sync, which
+    // would pour the user's synced data into a profile every agent drives.
+    if cfg!(windows) && chrome.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("msedge")) {
+        cmd.args(["--disable-sync", "--disable-features=msImplicitSignin"]);
+    }
     cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log);
     // Outlive the herdr action / pane that started us.
     #[cfg(unix)]
