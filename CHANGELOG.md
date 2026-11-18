@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.3](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.2...v1.3.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **deps:** Bump resvg from 0.49.0 to 0.50.0 ([3f17857](https://github.com/MattJColes/herdr-web-browser/commit/3f17857608017dc0fd034ad20c4da1886565641f))
+* **deps:** Bump resvg from 0.49.0 to 0.50.0 ([d2aaa58](https://github.com/MattJColes/herdr-web-browser/commit/d2aaa58a8eb6a0c2319d75c1f967cb966e90ac47))
+* **view:** size herdr desktop's live view from real cell metrics ([1a578d1](https://github.com/MattJColes/herdr-web-browser/commit/1a578d1bcbc579681d669038a63e984637b2c19a))
+* **view:** size herdr desktop's live view from real cell metrics ([5b25089](https://github.com/MattJColes/herdr-web-browser/commit/5b2508993fe40f7e08d504130de61cb004f34300))
+
 ## [1.3.2](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.1...v1.3.2) (2026-11-11)
 
 
