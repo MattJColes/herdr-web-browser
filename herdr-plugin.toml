@@ -91,7 +91,7 @@ command = ["./target/release/herdr-web-browser", "open-link"]
 [[actions]]
 id = "install-cli"
 title = "Browser: install CLI"
-description = "Symlink herdr-web-browser into ~/.local/bin so agents can call it."
+description = "Put herdr-web-browser in ~/.local/bin so agents can call it."
 command = ["./target/release/herdr-web-browser", "install-cli"]
 
 # Each pane owns a tab: close it with the pane, follow the pane when it moves.

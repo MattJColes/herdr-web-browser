@@ -26,14 +26,14 @@ fn env_dir(var: &str) -> Option<PathBuf> {
 pub fn state_dir() -> PathBuf {
     env_dir("HERDR_PLUGIN_STATE_DIR").unwrap_or_else(|| {
         let base = if cfg!(windows) { env_dir("LOCALAPPDATA") } else { env_dir("XDG_STATE_HOME") };
-        base.unwrap_or_else(|| home_or_panic().join(".local/state")).join("herdr/plugins").join(PLUGIN_ID)
+        base.unwrap_or_else(|| home_or_panic().join(".local").join("state")).join("herdr").join("plugins").join(PLUGIN_ID)
     })
 }
 
 pub fn config_dir() -> PathBuf {
     env_dir("HERDR_PLUGIN_CONFIG_DIR").unwrap_or_else(|| {
         let base = if cfg!(windows) { env_dir("APPDATA") } else { env_dir("XDG_CONFIG_HOME") };
-        base.unwrap_or_else(|| home_or_panic().join(".config")).join("herdr/plugins/config").join(PLUGIN_ID)
+        base.unwrap_or_else(|| home_or_panic().join(".config")).join("herdr").join("plugins").join("config").join(PLUGIN_ID)
     })
 }
 

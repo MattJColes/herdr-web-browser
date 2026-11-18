@@ -293,7 +293,7 @@ fn on_pane_moved() -> R<()> {
 
 /// Where install-cli puts the CLI: ~/.local/bin/herdr-web-browser (.exe on Windows).
 pub(crate) fn cli_path() -> R<PathBuf> {
-    Ok(state::home().ok_or("no home folder")?.join(".local/bin").join(format!("herdr-web-browser{}", std::env::consts::EXE_SUFFIX)))
+    Ok(state::home().ok_or("no home folder")?.join(".local").join("bin").join(format!("herdr-web-browser{}", std::env::consts::EXE_SUFFIX)))
 }
 
 fn install_cli() -> R<String> {
