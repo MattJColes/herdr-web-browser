@@ -8,8 +8,13 @@ use std::path::{Path, PathBuf};
 
 pub const PLUGIN_ID: &str = "herdr-web-browser";
 
-fn home() -> PathBuf {
-    PathBuf::from(std::env::var_os("HOME").expect("HOME is not set"))
+/// The user's home folder (HOME, or USERPROFILE on Windows).
+pub fn home() -> Option<PathBuf> {
+    std::env::home_dir().filter(|p| !p.as_os_str().is_empty())
+}
+
+fn home_or_panic() -> PathBuf {
+    home().expect("no home folder (HOME / USERPROFILE is not set)")
 }
 
 fn env_dir(var: &str) -> Option<PathBuf> {
@@ -19,19 +24,39 @@ fn env_dir(var: &str) -> Option<PathBuf> {
 /// Herdr sets HERDR_PLUGIN_STATE_DIR for plugin commands; agents calling the CLI
 /// from their shell don't have it, so fall back to the same path herdr uses.
 pub fn state_dir() -> PathBuf {
-    env_dir("HERDR_PLUGIN_STATE_DIR")
-        .unwrap_or_else(|| env_dir("XDG_STATE_HOME").unwrap_or_else(|| home().join(".local/state")).join("herdr/plugins").join(PLUGIN_ID))
+    env_dir("HERDR_PLUGIN_STATE_DIR").unwrap_or_else(|| {
+        let base = if cfg!(windows) { env_dir("LOCALAPPDATA") } else { env_dir("XDG_STATE_HOME") };
+        base.unwrap_or_else(|| home_or_panic().join(".local/state")).join("herdr/plugins").join(PLUGIN_ID)
+    })
 }
 
 pub fn config_dir() -> PathBuf {
-    env_dir("HERDR_PLUGIN_CONFIG_DIR")
-        .unwrap_or_else(|| env_dir("XDG_CONFIG_HOME").unwrap_or_else(|| home().join(".config")).join("herdr/plugins/config").join(PLUGIN_ID))
+    env_dir("HERDR_PLUGIN_CONFIG_DIR").unwrap_or_else(|| {
+        let base = if cfg!(windows) { env_dir("APPDATA") } else { env_dir("XDG_CONFIG_HOME") };
+        base.unwrap_or_else(|| home_or_panic().join(".config")).join("herdr/plugins/config").join(PLUGIN_ID)
+    })
 }
 
-/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-web-browser`.
+/// This binary's real path. Windows: `current_exe` as is, since `canonicalize` there returns
+/// `\\?\` paths that Chrome and JS mods don't expect, and there are no symlinks to resolve.
+pub fn own_exe() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    if cfg!(windows) { Ok(exe) } else { fs::canonicalize(exe) }
+}
+
+/// Where install-cli's Windows copy of the binary notes the plugin checkout it came from.
+pub fn root_note(exe: &Path) -> PathBuf {
+    exe.with_extension("root")
+}
+
+/// Plugin checkout root: env from herdr, else derived from `<root>/target/release/herdr-web-browser`
+/// (on Windows, the install-cli copy reads it from its root note).
 pub fn plugin_root() -> PathBuf {
     env_dir("HERDR_PLUGIN_ROOT").unwrap_or_else(|| {
-        let exe = std::env::current_exe().and_then(fs::canonicalize).expect("cannot locate own executable");
+        let exe = own_exe().expect("cannot locate own executable");
+        if let Ok(root) = fs::read_to_string(root_note(&exe)) {
+            return PathBuf::from(root.trim());
+        }
         exe.ancestors().nth(3).map(Path::to_path_buf).unwrap_or_default()
     })
 }

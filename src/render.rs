@@ -5,7 +5,9 @@
 use crate::R;
 use crate::state::Config;
 use base64::Engine;
-use std::io::{Read, Write, stdout};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{Write, stdout};
 use std::time::Duration;
 
 pub const IMAGE_ID: u32 = 4711;
@@ -114,6 +116,7 @@ fn screen_scale() -> Option<f64> {
 
 /// Read terminal replies until DA1 arrives or `timeout` passes, without leaving a reader
 /// behind: a thread blocked on stdin would later swallow the user's keys and clicks.
+#[cfg(unix)]
 fn read_replies(timeout: Duration) -> Vec<u8> {
     let deadline = std::time::Instant::now() + timeout;
     let mut buf = Vec::new();
@@ -141,6 +144,14 @@ fn read_replies(timeout: Duration) -> Vec<u8> {
             return buf; // DA1 reply: ESC [ ? ... c
         }
     }
+}
+
+/// Windows has no poll on a console stdin, and a pending ReadConsole would eat keys later,
+/// so don't probe: herdr desktop sizes cells from `herdr-app status` instead, and
+/// `view_renderer = "kitty"` forces the Kitty renderer elsewhere.
+#[cfg(not(unix))]
+fn read_replies(_timeout: Duration) -> Vec<u8> {
+    Vec::new()
 }
 
 /// Ask for cell size and Kitty support in one round trip. DA1 (`CSI c`) goes last because

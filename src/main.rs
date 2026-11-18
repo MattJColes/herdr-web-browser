@@ -285,20 +285,43 @@ fn on_pane_moved() -> R<()> {
     Ok(())
 }
 
+/// Where install-cli puts the CLI: ~/.local/bin/herdr-web-browser (.exe on Windows).
+pub(crate) fn cli_path() -> R<PathBuf> {
+    Ok(state::home().ok_or("no home folder")?.join(".local/bin").join(format!("herdr-web-browser{}", std::env::consts::EXE_SUFFIX)))
+}
+
 fn install_cli() -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?;
-    let dir = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".local/bin");
+    let exe = state::own_exe()?;
+    let link = cli_path()?;
+    let dir = link.parent().ok_or("bad CLI path")?.to_path_buf();
     std::fs::create_dir_all(&dir)?;
-    let link = dir.join("herdr-web-browser");
-    match std::fs::symlink_metadata(&link) {
-        Ok(m) if m.file_type().is_symlink() => std::fs::remove_file(&link)?,
-        Ok(_) => return Err(format!("{} exists and is not a symlink; not replacing it", link.display()).into()),
-        Err(_) => {}
+    #[cfg(unix)]
+    {
+        match std::fs::symlink_metadata(&link) {
+            Ok(m) if m.file_type().is_symlink() => std::fs::remove_file(&link)?,
+            Ok(_) => return Err(format!("{} exists and is not a symlink; not replacing it", link.display()).into()),
+            Err(_) => {}
+        }
+        std::os::unix::fs::symlink(&exe, &link)?;
     }
-    std::os::unix::fs::symlink(&exe, &link)?;
+    // Symlinks need admin or developer mode on Windows, so copy, and leave a note of the
+    // checkout so the copy still finds the extension and mods. A running copy (an agent mid-command)
+    // can't be overwritten but can be renamed out of the way.
+    #[cfg(windows)]
+    {
+        if link == exe {
+            return Ok(format!("{} is the installed copy; run install-cli from the plugin build", exe.display()));
+        }
+        if link.exists() {
+            std::fs::rename(&link, link.with_extension("exe.old"))?;
+        }
+        std::fs::copy(&exe, &link)?;
+        std::fs::write(state::root_note(&link), state::plugin_root().display().to_string())?;
+    }
     let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).any(|p| p == dir);
-    let hint = if on_path { "" } else { " (add ~/.local/bin to PATH)" };
-    Ok(format!("linked {} -> {}{hint}", link.display(), exe.display()))
+    let hint = if on_path { String::new() } else { format!(" (add {} to PATH)", dir.display()) };
+    let verb = if cfg!(windows) { "copied" } else { "linked" };
+    Ok(format!("{verb} {} -> {}{hint}", link.display(), exe.display()))
 }
 
 const DESKTOP_MODS: &[&str] =
@@ -306,9 +329,7 @@ const DESKTOP_MODS: &[&str] =
 
 /// Herdr.app's home folder (mods, programs.json).
 pub(crate) fn desktop_home() -> PathBuf {
-    std::env::var_os("HERDR_APP_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"))
+    std::env::var_os("HERDR_APP_HOME").map(PathBuf::from).unwrap_or_else(|| state::home().unwrap_or_default().join(".config/herdr-app"))
 }
 
 /// Whether herdr desktop's installed menu mod launches `exe` (false when it isn't installed).
@@ -319,7 +340,7 @@ fn desktop_runs(home: &std::path::Path, exe: &std::path::Path) -> bool {
 
 /// Copy the desktop mods into Herdr.app's home with this binary's path baked in, then check them.
 fn install_desktop() -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?;
+    let exe = state::own_exe()?;
     let home = desktop_home();
     if !home.is_dir() {
         return Err(format!("{} not found; is herdr desktop installed?", home.display()).into());
@@ -392,7 +413,7 @@ fn read_json(path: &std::path::Path) -> R<Value> {
 /// Give the live view its own name and icon in herdr desktop (instead of a generic terminal),
 /// merged into the user's programs.json without touching their other entries.
 fn register_program(home: &std::path::Path) -> R<()> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let path = home.join("programs.json");
     let mut doc = read_json(&path)?;
     let programs = doc.as_object_mut().ok_or("programs.json is not an object")?.entry("programs").or_insert_with(|| json!({}));
@@ -561,7 +582,7 @@ fn run(cli: Cli) -> R<()> {
         }
         Cmd::Screenshot { path } => {
             std::fs::write(&path, page(true)?.screenshot()?)?;
-            let abs = std::fs::canonicalize(&path)?;
+            let abs = if cfg!(windows) { std::path::absolute(&path)? } else { std::fs::canonicalize(&path)? };
             print(j, abs.display().to_string(), json!({ "path": abs }));
         }
         Cmd::Wait { css, timeout } => {
@@ -602,7 +623,7 @@ fn run(cli: Cli) -> R<()> {
             let mut msg = install_cli()?;
             // herdr runs this at startup: (re)install herdr desktop's mods unless they already run this
             // binary, so a dev build (or an old install) never stays wired in after the plugin updates.
-            let exe = std::fs::canonicalize(std::env::current_exe()?)?;
+            let exe = state::own_exe()?;
             if desktop_home().is_dir() && !desktop_runs(&desktop_home(), &exe) {
                 match install_desktop() {
                     Ok(m) => msg = format!("{msg}\n{m}"),

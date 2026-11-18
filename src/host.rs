@@ -208,7 +208,7 @@ pub fn open_picker(host: Host) -> R<()> {
 
 /// Open the live view in a pane beside `owner` (or the focused pane).
 pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let mut argv = vec![exe.clone()];
     if let Some(o) = owner {
         argv.extend(["--owner".to_string(), o.to_string()]);
@@ -267,7 +267,7 @@ pub fn split_beside_agent() -> R<bool> {
     let (Some((_, pane)), Some((my_tab, _))) = (desktop_place(&ls, agent), desktop_place(&ls, &me)) else {
         return Ok(false);
     };
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let argv = serde_json::to_string(&[exe.as_str(), "view", "--own-tab"])?;
     let made = run("herdr-app", &["do", "pane.split", "--direction", "right", "--pane", &pane, "--argv", &argv])?;
     if let Some(t) = made["terminal"].as_str() {

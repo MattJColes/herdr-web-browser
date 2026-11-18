@@ -2,7 +2,6 @@
 
 use crate::{R, agent_setup, chrome, state};
 use serde_json::Value;
-use std::path::PathBuf;
 
 /// Remove agent instructions, desktop mods, their programs.json entry and menu shortcut, and the CLI link;
 /// with `purge`, also the browser's state (profile, Chrome for Testing, screenshots).
@@ -41,10 +40,17 @@ pub fn run(purge: bool) -> R<Vec<String>> {
             }
         }
     }
-    let link = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".local/bin/herdr-web-browser");
-    // Only our own symlink, never a file someone put there.
-    if std::fs::symlink_metadata(&link).is_ok_and(|m| m.file_type().is_symlink()) {
-        std::fs::remove_file(&link)?;
+    let link = crate::cli_path()?;
+    // Only our own symlink, never a file someone put there. Windows: install-cli's copy, known by its root note.
+    let ours =
+        if cfg!(windows) { state::root_note(&link).is_file() } else { std::fs::symlink_metadata(&link).is_ok_and(|m| m.file_type().is_symlink()) };
+    if ours {
+        let removed = std::fs::remove_file(&link);
+        // Windows won't delete a running exe (this may be it), but will rename it.
+        #[cfg(windows)]
+        let removed = removed.or_else(|_| std::fs::rename(&link, link.with_extension("exe.old")));
+        removed?;
+        let _ = std::fs::remove_file(state::root_note(&link));
         done.push(format!("removed {}", link.display()));
     }
     if purge && state::state_dir().is_dir() {

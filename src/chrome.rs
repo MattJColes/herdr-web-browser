@@ -6,8 +6,6 @@ use crate::{R, page};
 use serde_json::json;
 use std::fs;
 use std::net::TcpStream;
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -84,11 +82,15 @@ pub fn port() -> Option<u16> {
 /// Chrome launches the host as `<path> <origin>`, so `path` must be a wrapper
 /// that adds our subcommand.
 fn install_native_host(profile: &Path) -> R<()> {
-    let exe = fs::canonicalize(std::env::current_exe()?)?;
+    let exe = state::own_exe()?;
     let wrapper = state::state_dir().join("native-host.sh");
     let quoted = exe.display().to_string().replace('\'', r"'\''");
     fs::write(&wrapper, format!("#!/bin/sh\nexec '{quoted}' native-host \"$@\"\n"))?;
-    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+    }
     let dir = profile.join("NativeMessagingHosts");
     fs::create_dir_all(&dir)?;
     let manifest = json!({
@@ -103,7 +105,7 @@ fn install_native_host(profile: &Path) -> R<()> {
 }
 
 fn has_display() -> bool {
-    cfg!(target_os = "macos") || ["DISPLAY", "WAYLAND_DISPLAY"].iter().any(|v| std::env::var_os(v).is_some_and(|x| !x.is_empty()))
+    cfg!(any(target_os = "macos", windows)) || ["DISPLAY", "WAYLAND_DISPLAY"].iter().any(|v| std::env::var_os(v).is_some_and(|x| !x.is_empty()))
 }
 
 pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
@@ -127,7 +129,20 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
-    cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log).process_group(0); // outlive the herdr action / pane that started us
+    cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log);
+    // Outlive the herdr action / pane that started us.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
     let child = cmd.spawn().map_err(|e| format!("launch {}: {e}", chrome.display()))?;
     let pid = child.id();
 

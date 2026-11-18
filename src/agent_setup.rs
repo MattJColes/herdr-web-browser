@@ -72,7 +72,7 @@ pub fn remove(text: &str) -> String {
 }
 
 fn home() -> R<PathBuf> {
-    Ok(PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?))
+    Ok(crate::state::home().ok_or("no home folder (HOME / USERPROFILE is not set)")?)
 }
 
 fn skill_dir(home: &Path) -> PathBuf {

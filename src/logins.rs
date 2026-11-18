@@ -21,7 +21,12 @@ const WINDOWS_TO_UNIX_SECS: i64 = 11_644_473_600;
 
 /// Google Chrome's own data folder (not Chrome for Testing's).
 fn chrome_dir() -> R<PathBuf> {
-    let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
+    if cfg!(windows) {
+        // Chrome 127+ encrypts Windows cookies with an app-bound key (v20) only Chrome's own
+        // elevated service can unwrap, so DPAPI alone can't read them.
+        return Err("import-logins is not supported on Windows: Chrome's app-bound cookie encryption blocks reading them; sign in inside this browser instead".into());
+    }
+    let home = crate::state::home().ok_or("no home folder")?;
     Ok(if cfg!(target_os = "macos") { home.join("Library/Application Support/Google/Chrome") } else { home.join(".config/google-chrome") })
 }
 
