@@ -49,6 +49,9 @@ enum Cmd {
     Start {
         #[arg(long)]
         headless: bool,
+        /// Also open the status pane (herdr terminal app).
+        #[arg(long)]
+        pane: bool,
     },
     /// Close the browser.
     Stop,
@@ -58,6 +61,9 @@ enum Cmd {
     Mode {
         mode: Option<Mode>,
     },
+    /// herdr's link handler: open $HERDR_PLUGIN_CLICKED_URL with the live view.
+    #[command(hide = true)]
+    OpenLink,
     /// Navigate this pane's tab (or a new tab) to URL.
     Open {
         url: String,
@@ -434,12 +440,15 @@ fn run(cli: Cli) -> R<()> {
     let cfg = Config::load()?;
     let page = |create| page::resolve(&cfg, cli.tab, create);
     match cli.cmd {
-        Cmd::Start { headless } => {
+        Cmd::Start { headless, pane } => {
             let url = match chrome::endpoint() {
                 Some(u) => u,
                 None if headless => chrome::launch(Mode::Headless, &cfg)?,
                 None => chrome::ensure(&cfg)?,
             };
+            if pane {
+                host::herdr(&["plugin", "pane", "open", "--plugin", state::PLUGIN_ID, "--entrypoint", "browser"])?;
+            }
             print(j, format!("running at {url}"), json!({ "endpoint": url }));
         }
         Cmd::Stop => {
@@ -464,6 +473,10 @@ fn run(cli: Cli) -> R<()> {
             });
             chrome::switch_mode(mode, &cfg)?;
             print(j, format!("mode: {mode:?}").to_lowercase(), json!({ "mode": mode }));
+        }
+        Cmd::OpenLink => {
+            let url = std::env::var("HERDR_PLUGIN_CLICKED_URL").map_err(|_| "HERDR_PLUGIN_CLICKED_URL not set")?;
+            return run(Cli { cmd: Cmd::Open { url, new_tab: false, show: true }, ..cli });
         }
         Cmd::Open { url, new_tab, show } => {
             let mut p = page(true)?;
