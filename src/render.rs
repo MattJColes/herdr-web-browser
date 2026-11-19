@@ -180,10 +180,15 @@ pub fn detect(cfg: &Config) -> (Cells, Renderer) {
     if let Some(k) = cfg.cell_aspect.filter(|k| *k > 0.5 && *k < 5.0) {
         cells.h = cells.w * k;
     }
+    // herdr desktop on Windows on ARM (x64 under emulation, herdr-core 0.1.21) runs its
+    // terminals on Windows' own conhost, which drops Kitty images, and its font has no
+    // octants: half blocks are what shows there.
+    let desktop_without_images = desktop && cfg!(all(windows, target_arch = "aarch64"));
     let renderer = match cfg.view_renderer.as_deref() {
         Some("kitty") => Renderer::Kitty,
         Some("blocks") => Renderer::Blocks,
         Some("octants") => Renderer::Octants,
+        _ if desktop_without_images => Renderer::Blocks,
         _ if kitty => Renderer::Kitty,
         // Windows Terminal (the Windows 11 default) draws octants; elsewhere a font may not.
         _ if cfg!(windows) => Renderer::Octants,

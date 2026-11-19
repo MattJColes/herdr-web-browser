@@ -43,6 +43,16 @@ It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.co
 - Rust, to build it (`cargo`)
 - macOS, Linux or Windows
 
+### On Windows
+
+Windows 11 works, on x64 and, with a few limits, on ARM[^arm]:
+
+- **Live view.** Sharp in herdr desktop. The herdr terminal app runs in Windows Terminal, which can't show images, so the page is drawn with block characters: zoom the pane to read it, or click the window button for a real Chrome window.
+- **Ctrl-click links.** Windows Terminal opens links itself. Set `"experimental.detectURLs": false` in its `settings.json` so herdr gets the click.
+- **Logins.** Importing logins from Chrome doesn't work (see [below](#sign-in-with-your-chrome-logins)); sign in inside the browser instead.
+
+[^arm]: On Windows on ARM there's no Chrome for Testing, so it uses your installed Chrome or Edge. herdr desktop runs there as an x64 app under emulation and its terminals don't show images yet, so the live view draws blocks in it too; `herdr-web-browser mode headed` gives you a real Chrome window. Tested on a Snapdragon X laptop with Windows 11 24H2.
+
 ## Install
 
 From herdr's [plugin marketplace](https://herdr.dev/plugins/), in the herdr terminal app:
@@ -209,7 +219,7 @@ scale = 2                     # herdr desktop on Linux or Windows: your screen's
 ## Troubleshooting
 
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
-- **The view is drawn in blocks on Windows.** Windows Terminal can't show the images herdr passes through, so outside herdr desktop the view draws the page with octant characters (2x4 pixels a cell) and lays it out at least 640 px wide. Headings and buttons read well; zoom the view's pane (or give it a wide split) to read body text. If your terminal shows Kitty images (WezTerm, or herdr inside herdr desktop), set `view_renderer = "kitty"`; if octants show as boxes, set `view_renderer = "blocks"`.
+- **The view is drawn in blocks on Windows.** See [On Windows](#on-windows). In Windows Terminal it uses octant characters (2x4 pixels a cell); if they show as boxes, set `view_renderer = "blocks"`. If your terminal does show Kitty images, set `view_renderer = "kitty"`.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font on macOS, 2.25 on Linux).
 - **The page is blurry in herdr desktop on Linux or Windows.** Set `scale` to your screen's scale (2 on a HiDPI screen, 1.5 for 150%). macOS detects it.
 - **Clicking Chrome in the Dock does nothing.** The browser is using your own Chrome. Run `herdr-web-browser install-browser`.
