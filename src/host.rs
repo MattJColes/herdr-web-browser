@@ -208,7 +208,7 @@ pub fn open_picker(host: Host) -> R<()> {
 
 /// Open the live view in a pane beside `owner` (or the focused pane).
 pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let mut argv = vec![exe.clone()];
     if let Some(o) = owner {
         argv.extend(["--owner".to_string(), o.to_string()]);
@@ -239,8 +239,15 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
             }
             let v = herdr(&args)?;
             let pane = v.pointer("/result/pane/pane_id").and_then(Value::as_str).ok_or("pane split returned no pane")?;
-            let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
-            let cmd = argv.iter().map(q).collect::<Vec<_>>().join(" ");
+            // `pane run` types into the pane's shell: POSIX sh, or PowerShell (herdr's default) on Windows.
+            // ponytail: a cmd.exe or Git Bash pane on Windows won't parse this; detect the shell if users hit it.
+            let cmd = if cfg!(windows) {
+                let q = |a: &String| format!("'{}'", a.replace('\'', "''"));
+                format!("& {}", argv.iter().map(q).collect::<Vec<_>>().join(" "))
+            } else {
+                let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
+                argv.iter().map(q).collect::<Vec<_>>().join(" ")
+            };
             herdr(&["pane", "run", pane, &cmd])?;
             Ok(format!("live view in pane {pane} (needs a terminal with Kitty graphics)"))
         }
@@ -267,7 +274,7 @@ pub fn split_beside_agent() -> R<bool> {
     let (Some((_, pane)), Some((my_tab, _))) = (desktop_place(&ls, agent), desktop_place(&ls, &me)) else {
         return Ok(false);
     };
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let argv = serde_json::to_string(&[exe.as_str(), "view", "--own-tab"])?;
     let made = run("herdr-app", &["do", "pane.split", "--direction", "right", "--pane", &pane, "--argv", &argv])?;
     if let Some(t) = made["terminal"].as_str() {

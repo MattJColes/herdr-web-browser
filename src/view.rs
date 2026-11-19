@@ -33,6 +33,19 @@ struct StreamSize {
     jpeg: bool,
 }
 
+/// Narrowest page layout for the octant view: below this, sites switch to phone layouts.
+const OCTANT_MIN_CSS_W: f64 = 640.0;
+
+/// Octants show 2x4 square pixels a cell (cells are about twice as tall as wide), so lay the
+/// page out at 2 CSS px a pixel: body text is ~8 pixels tall and stays legible, where a
+/// screen-sized layout squeezed into the pane makes it 2. Narrow panes keep a 640 px layout.
+fn octant_stream_size(cols: u16, rows: u16, jpeg: bool) -> StreamSize {
+    let (pw, ph) = (cols.max(1) as f64 * 2.0, rows.max(1) as f64 * 4.0);
+    let css_per_px = (OCTANT_MIN_CSS_W / pw).max(2.0);
+    let viewport = ((pw * css_per_px).round() as u32, (ph * css_per_px).round() as u32);
+    StreamSize { viewport, dpr: 1.0, max_frame: viewport, jpeg }
+}
+
 /// Screencast `target` on its own connection until `stop`; acks every frame.
 fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sender<Msg>, stop: Arc<AtomicBool>) {
     let run = || -> R<()> {
@@ -268,6 +281,7 @@ fn spawn_writer() -> (Sender<Out>, std::thread::JoinHandle<()>) {
                                 render::kitty_swap(&mut buf, &b64, id, old, img_cols, rows)
                             }
                             Renderer::Blocks => render::blocks(&mut buf, &b64, PAGE_TOP, cols, rows),
+                            Renderer::Octants => render::octants(&mut buf, &b64, PAGE_TOP, cols, rows),
                         };
                         if drawn.is_err() {
                             buf.extend_from_slice(b"\x1b[0m");
@@ -604,11 +618,14 @@ impl View {
 
     fn stream_size(&self) -> StreamSize {
         let (c, r) = Self::area();
+        if self.renderer == Renderer::Octants {
+            return octant_stream_size(c, r, self.raw_frames);
+        }
         let viewport = ((c as f64 * self.cells.w / self.cells.dpr) as u32, (r as f64 * self.cells.h / self.cells.dpr) as u32);
         let max_frame = match self.renderer {
             Renderer::Kitty => ((viewport.0 as f64 * self.cells.dpr) as u32, (viewport.1 as f64 * self.cells.dpr) as u32),
             // Two pixels per cell; 4x that leaves room for box-averaging.
-            Renderer::Blocks => (c as u32 * 4, r as u32 * 8),
+            _ => (c as u32 * 4, r as u32 * 8),
         };
         StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames }
     }
@@ -1395,5 +1412,19 @@ mod tests {
     fn clip_marks_truncation() {
         assert_eq!(clip("abcdef", 4), "abc…");
         assert_eq!(clip("abc", 4), "abc");
+    }
+
+    #[test]
+    fn octant_pages_are_laid_out_at_two_css_px_a_pixel() {
+        // 200x50 cells = 400x200 octant pixels.
+        let s = octant_stream_size(200, 50, false);
+        assert_eq!((s.viewport, s.max_frame, s.dpr), ((800, 400), (800, 400), 1.0));
+    }
+
+    #[test]
+    fn narrow_octant_panes_keep_a_desktop_width_layout() {
+        // 40 cols would be a 160 px phone layout; keep 640 px at the pane's shape.
+        let s = octant_stream_size(40, 30, false);
+        assert_eq!(s.viewport, (640, 960));
     }
 }

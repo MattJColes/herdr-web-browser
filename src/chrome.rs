@@ -6,8 +6,6 @@ use crate::{R, page};
 use serde_json::json;
 use std::fs;
 use std::net::TcpStream;
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
@@ -24,7 +22,15 @@ const APP_PATHS: &[&str] = &[
     "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "Brave Browser.app/Contents/MacOS/Brave Browser",
 ];
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+const WIN_PATHS: &[&str] = &[
+    r"Google\Chrome\Application\chrome.exe",
+    r"Chromium\Application\chrome.exe",
+    r"BraveSoftware\Brave-Browser\Application\brave.exe",
+    // Ships with Windows, so the last resort.
+    r"Microsoft\Edge\Application\msedge.exe",
+];
+#[cfg(not(any(target_os = "macos", windows)))]
 const BIN_NAMES: &[&str] = &["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"];
 
 pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
@@ -47,7 +53,16 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
             }
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    for app in WIN_PATHS {
+        for base in ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"].iter().filter_map(std::env::var_os) {
+            let p = PathBuf::from(base).join(app);
+            if p.is_file() {
+                return Ok(p);
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     for dir in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
         for name in BIN_NAMES {
             let p = dir.join(name);
@@ -81,14 +96,26 @@ pub fn port() -> Option<u16> {
     parse_port_file(&s).map(|(p, _)| p)
 }
 
-/// Chrome launches the host as `<path> <origin>`, so `path` must be a wrapper
-/// that adds our subcommand.
+/// Chrome launches the host as `<path> <origin>` (on Windows also `--parent-window=N`),
+/// so `path` must be a wrapper that adds our subcommand.
 fn install_native_host(profile: &Path) -> R<()> {
-    let exe = fs::canonicalize(std::env::current_exe()?)?;
-    let wrapper = state::state_dir().join("native-host.sh");
-    let quoted = exe.display().to_string().replace('\'', r"'\''");
-    fs::write(&wrapper, format!("#!/bin/sh\nexec '{quoted}' native-host \"$@\"\n"))?;
-    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+    let exe = state::own_exe()?;
+    #[cfg(unix)]
+    let wrapper = {
+        use std::os::unix::fs::PermissionsExt;
+        let wrapper = state::state_dir().join("native-host.sh");
+        let quoted = exe.display().to_string().replace('\'', r"'\''");
+        fs::write(&wrapper, format!("#!/bin/sh\nexec '{quoted}' native-host \"$@\"\n"))?;
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+        wrapper
+    };
+    #[cfg(windows)]
+    let wrapper = {
+        let wrapper = state::state_dir().join("native-host.cmd");
+        let quoted = exe.display().to_string().replace('%', "%%");
+        fs::write(&wrapper, format!("@\"{quoted}\" native-host %*\r\n"))?;
+        wrapper
+    };
     let dir = profile.join("NativeMessagingHosts");
     fs::create_dir_all(&dir)?;
     let manifest = json!({
@@ -98,12 +125,49 @@ fn install_native_host(profile: &Path) -> R<()> {
         "type": "stdio",
         "allowed_origins": [format!("chrome-extension://{EXTENSION_ID}/")],
     });
-    fs::write(dir.join(format!("{NATIVE_HOST}.json")), serde_json::to_vec_pretty(&manifest)?)?;
+    let manifest_path = dir.join(format!("{NATIVE_HOST}.json"));
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    // Chrome on Windows finds hosts through the registry, not the profile folder.
+    #[cfg(windows)]
+    for key in native_host_keys() {
+        let path = manifest_path.display().to_string();
+        crate::host::run("reg", &["add", &key, "/ve", "/t", "REG_SZ", "/d", &path, "/f"])?;
+    }
     Ok(())
 }
 
+/// Per-user registry keys that point each Chromium browser at our native host manifest.
+#[cfg(windows)]
+pub fn native_host_keys() -> Vec<String> {
+    [r"Google\Chrome", "Chromium", r"Microsoft\Edge", r"BraveSoftware\Brave-Browser"]
+        .iter()
+        .map(|b| format!(r"HKCU\Software\{b}\NativeMessagingHosts\{NATIVE_HOST}"))
+        .collect()
+}
+
 fn has_display() -> bool {
-    cfg!(target_os = "macos") || ["DISPLAY", "WAYLAND_DISPLAY"].iter().any(|v| std::env::var_os(v).is_some_and(|x| !x.is_empty()))
+    cfg!(any(target_os = "macos", windows)) || ["DISPLAY", "WAYLAND_DISPLAY"].iter().any(|v| std::env::var_os(v).is_some_and(|x| !x.is_empty()))
+}
+
+/// Windows children inherit every inheritable handle, not just the stdio they're given, so a
+/// long-lived child (Chrome, a background download) would hold our caller's stdout pipe open
+/// and an agent reading our output would never see it end. Stop our own stdio from leaking;
+/// `Stdio::inherit` still works, as std duplicates the handle for that child.
+#[cfg(windows)]
+pub fn keep_std_handles_from_children() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetStdHandle(which: u32) -> *mut std::ffi::c_void;
+        fn SetHandleInformation(handle: *mut std::ffi::c_void, mask: u32, flags: u32) -> i32;
+    }
+    const HANDLE_FLAG_INHERIT: u32 = 1;
+    // STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are -10, -11, -12 as DWORD.
+    for which in [-10i32, -11, -12] {
+        // SAFETY: plain Win32 calls on this process's own std handles; failure (no console, null handle) is harmless.
+        unsafe {
+            SetHandleInformation(GetStdHandle(which as u32), HANDLE_FLAG_INHERIT, 0);
+        }
+    }
 }
 
 pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
@@ -127,7 +191,26 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
     if mode == Mode::Headless {
         cmd.arg("--headless=new");
     }
-    cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log).process_group(0); // outlive the herdr action / pane that started us
+    // Edge on Windows signs a new profile in to the Windows account and turns on sync, which
+    // would pour the user's synced data into a profile every agent drives.
+    if cfg!(windows) && chrome.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("msedge")) {
+        cmd.args(["--disable-sync", "--disable-features=msImplicitSignin"]);
+    }
+    cmd.arg("about:blank").stdin(Stdio::null()).stdout(Stdio::null()).stderr(log);
+    // Outlive the herdr action / pane that started us.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        keep_std_handles_from_children();
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
     let child = cmd.spawn().map_err(|e| format!("launch {}: {e}", chrome.display()))?;
     let pid = child.id();
 

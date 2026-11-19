@@ -1,11 +1,14 @@
 //! Terminal graphics for the live view: Kitty images where the terminal supports
 //! them (herdr desktop; the herdr TUI inside Ghostty, kitty or WezTerm), else
-//! truecolor half blocks, which work in any terminal.
+//! truecolor text: octants (2x4 pixels a cell) on Windows Terminal, half blocks
+//! (1x2) anywhere else.
 
 use crate::R;
 use crate::state::Config;
 use base64::Engine;
-use std::io::{Read, Write, stdout};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{Write, stdout};
 use std::time::Duration;
 
 pub const IMAGE_ID: u32 = 4711;
@@ -47,6 +50,9 @@ impl Cells {
 pub enum Renderer {
     Kitty,
     Blocks,
+    /// Unicode 16 octants: 2x4 pixels a cell in two colours. Windows Terminal draws them
+    /// itself (no font needed); herdr passes no image protocol through to it.
+    Octants,
 }
 
 /// Parse `CSI 6 ; height ; width t` (reply to `CSI 16 t`) out of raw terminal input.
@@ -114,6 +120,7 @@ fn screen_scale() -> Option<f64> {
 
 /// Read terminal replies until DA1 arrives or `timeout` passes, without leaving a reader
 /// behind: a thread blocked on stdin would later swallow the user's keys and clicks.
+#[cfg(unix)]
 fn read_replies(timeout: Duration) -> Vec<u8> {
     let deadline = std::time::Instant::now() + timeout;
     let mut buf = Vec::new();
@@ -143,6 +150,14 @@ fn read_replies(timeout: Duration) -> Vec<u8> {
     }
 }
 
+/// Windows has no poll on a console stdin, and a pending ReadConsole would eat keys later,
+/// so don't probe: herdr desktop sizes cells from `herdr-app status` instead, and
+/// `view_renderer = "kitty"` forces the Kitty renderer elsewhere.
+#[cfg(not(unix))]
+fn read_replies(_timeout: Duration) -> Vec<u8> {
+    Vec::new()
+}
+
 /// Ask for cell size and Kitty support in one round trip. DA1 (`CSI c`) goes last because
 /// every terminal answers it, so the read ends as soon as the others would have arrived.
 fn query_terminal() -> (Cells, bool) {
@@ -165,10 +180,18 @@ pub fn detect(cfg: &Config) -> (Cells, Renderer) {
     if let Some(k) = cfg.cell_aspect.filter(|k| *k > 0.5 && *k < 5.0) {
         cells.h = cells.w * k;
     }
+    // herdr desktop on Windows on ARM (x64 under emulation, herdr-core 0.1.21) runs its
+    // terminals on Windows' own conhost, which drops Kitty images, and its font has no
+    // octants: half blocks are what shows there.
+    let desktop_without_images = desktop && cfg!(all(windows, target_arch = "aarch64"));
     let renderer = match cfg.view_renderer.as_deref() {
         Some("kitty") => Renderer::Kitty,
         Some("blocks") => Renderer::Blocks,
+        Some("octants") => Renderer::Octants,
+        _ if desktop_without_images => Renderer::Blocks,
         _ if kitty => Renderer::Kitty,
+        // Windows Terminal (the Windows 11 default) draws octants; elsewhere a font may not.
+        _ if cfg!(windows) => Renderer::Octants,
         _ => Renderer::Blocks,
     };
     (cells, renderer)
@@ -382,6 +405,124 @@ pub fn blocks(out: &mut Vec<u8>, b64: &str, top_row: u16, cols: u16, rows: u16) 
     Ok(())
 }
 
+/// The character for a 2x4 pattern: bit `2 * row + col` set means that pixel takes the
+/// foreground colour. Unicode 16 (U+1CD00..U+1CDE5) encodes the 230 patterns that had no
+/// character yet, in pattern order; the other 26 are older block elements.
+pub fn octant_char(bits: u8) -> char {
+    static TABLE: std::sync::OnceLock<[char; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        const OLDER: [(u8, u32); 26] = [
+            (0x00, 0x20),    // space
+            (0xFF, 0x2588),  // full block
+            (0x0F, 0x2580),  // upper half
+            (0xF0, 0x2584),  // lower half
+            (0x55, 0x258C),  // left half
+            (0xAA, 0x2590),  // right half
+            (0x05, 0x2598),  // quadrant upper left
+            (0x0A, 0x259D),  // quadrant upper right
+            (0x50, 0x2596),  // quadrant lower left
+            (0xA0, 0x2597),  // quadrant lower right
+            (0xA5, 0x259A),  // upper left and lower right
+            (0x5A, 0x259E),  // upper right and lower left
+            (0xF5, 0x2599),  // all but upper right
+            (0x5F, 0x259B),  // all but lower right
+            (0xAF, 0x259C),  // all but lower left
+            (0xFA, 0x259F),  // all but upper left
+            (0x03, 0x1FB82), // upper one quarter
+            (0xC0, 0x2582),  // lower one quarter
+            (0x3F, 0x1FB85), // upper three quarters
+            (0xFC, 0x2586),  // lower three quarters
+            (0x14, 0x1FBE6), // middle left one quarter
+            (0x28, 0x1FBE7), // middle right one quarter
+            (0x01, 0x1CEA8), // left half upper one quarter
+            (0x02, 0x1CEAB), // right half upper one quarter
+            (0x40, 0x1CEA3), // left half lower one quarter
+            (0x80, 0x1CEA0), // right half lower one quarter
+        ];
+        let mut t = [' '; 256];
+        let mut next = 0x1CD00;
+        for (bits, slot) in t.iter_mut().enumerate() {
+            let cp = match OLDER.iter().find(|(b, _)| *b as usize == bits) {
+                Some(&(_, cp)) => cp,
+                None => {
+                    next += 1;
+                    next - 1
+                }
+            };
+            *slot = char::from_u32(cp).unwrap_or(' ');
+        }
+        t
+    })[bits as usize]
+}
+
+fn dist2(a: [u8; 3], b: [u8; 3]) -> u32 {
+    (0..3).map(|i| (a[i] as i32 - b[i] as i32).pow(2) as u32).sum()
+}
+
+fn mean(px: &[[u8; 3]]) -> [u8; 3] {
+    let n = px.len().max(1) as u32;
+    let s = px.iter().fold([0u32; 3], |s, p| [s[0] + p[0] as u32, s[1] + p[1] as u32, s[2] + p[2] as u32]);
+    [(s[0] / n) as u8, (s[1] / n) as u8, (s[2] / n) as u8]
+}
+
+/// Split one cell's 8 pixels into two colours: seed with the two most different pixels,
+/// give each pixel to the nearer seed, then use each group's mean. Returns (bits, fg, bg)
+/// with `bits` marking the fg pixels; a flat cell is all bg (bits 0).
+pub fn split_cell(px: &[[u8; 3]; 8]) -> (u8, [u8; 3], [u8; 3]) {
+    let (mut a, mut b, mut far) = (0, 0, 0);
+    for i in 0..8 {
+        for j in i + 1..8 {
+            let d = dist2(px[i], px[j]);
+            if d > far {
+                (a, b, far) = (i, j, d);
+            }
+        }
+    }
+    // Below ~6 levels a channel the eye can't tell the halves apart: draw it flat.
+    if far < 3 * 6 * 6 {
+        return (0, [0; 3], mean(px));
+    }
+    let mut bits = 0u8;
+    for (i, p) in px.iter().enumerate() {
+        if dist2(*p, px[b]) < dist2(*p, px[a]) {
+            bits |= 1 << i;
+        }
+    }
+    let fg: Vec<[u8; 3]> = (0..8).filter(|i| bits & (1 << i) != 0).map(|i| px[i]).collect();
+    let bg: Vec<[u8; 3]> = (0..8).filter(|i| bits & (1 << i) == 0).map(|i| px[i]).collect();
+    (bits, mean(&fg), mean(&bg))
+}
+
+/// Octant rendering: each cell shows 2x4 pixels in its best two colours.
+pub fn octants(out: &mut Vec<u8>, b64: &str, top_row: u16, cols: u16, rows: u16) -> R<()> {
+    let (w, h, rgb) = decode_rgb(b64)?;
+    let (gw, gh) = (cols as usize * 2, rows as usize * 4);
+    let px = downsample(w, h, &rgb, gw, gh);
+    let mut utf8 = [0u8; 4];
+    for y in 0..rows as usize {
+        write!(out, "\x1b[{};1H", top_row as usize + y + 1)?;
+        let (mut fg, mut bg) = (None, None);
+        for x in 0..cols as usize {
+            let mut cell = [[0u8; 3]; 8];
+            for (i, c) in cell.iter_mut().enumerate() {
+                *c = px[(4 * y + i / 2) * gw + 2 * x + i % 2];
+            }
+            let (bits, f, b) = split_cell(&cell);
+            if bits != 0 && fg != Some(f) {
+                write!(out, "\x1b[38;2;{};{};{}m", f[0], f[1], f[2])?;
+                fg = Some(f);
+            }
+            if bg != Some(b) {
+                write!(out, "\x1b[48;2;{};{};{}m", b[0], b[1], b[2])?;
+                bg = Some(b);
+            }
+            out.extend_from_slice(octant_char(bits).encode_utf8(&mut utf8).as_bytes());
+        }
+        out.extend_from_slice(b"\x1b[0m");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +572,48 @@ mod tests {
     fn cell_reply_is_parsed_from_mixed_input() {
         assert_eq!(parse_cell_reply(b"\x1b[6;34;16t\x1b[?62;22c"), Some((16.0, 34.0)));
         assert_eq!(parse_cell_reply(b"\x1b[?62;22c"), None);
+    }
+
+    #[test]
+    fn octants_fill_the_unicode_range_in_pattern_order() {
+        // The first new pattern is octant 3 alone, the last is all but octant 8 ... in order,
+        // skipping the 26 that older block elements already draw.
+        assert_eq!(octant_char(0x04), '\u{1CD00}');
+        assert_eq!(octant_char(0x06), '\u{1CD01}'); // 0x05 is the upper left quadrant
+        assert_eq!(octant_char(0xFE), '\u{1CDE5}');
+        let new = (0..=255u8).filter(|&b| ('\u{1CD00}'..='\u{1CDE5}').contains(&octant_char(b))).count();
+        assert_eq!(new, 230);
+        assert_eq!((octant_char(0x00), octant_char(0xFF), octant_char(0x0F), octant_char(0x55)), (' ', '█', '▀', '▌'));
+    }
+
+    #[test]
+    fn a_cell_splits_into_its_two_colours() {
+        let (ink, paper) = ([20, 30, 200], [250, 250, 250]);
+        // Ink down the left column only.
+        let mut px = [paper; 8];
+        for i in [0, 2, 4, 6] {
+            px[i] = ink;
+        }
+        let (bits, fg, bg) = split_cell(&px);
+        let (bits, fg, bg) = if fg == ink { (bits, fg, bg) } else { (!bits, bg, fg) };
+        assert_eq!((bits, fg, bg), (0x55, ink, paper));
+        assert_eq!(octant_char(bits), '▌');
+    }
+
+    #[test]
+    fn a_flat_cell_is_drawn_as_background() {
+        let (bits, _, bg) = split_cell(&[
+            [100, 100, 100],
+            [102, 101, 100],
+            [100, 100, 100],
+            [101, 100, 100],
+            [100, 100, 100],
+            [100, 100, 100],
+            [100, 100, 100],
+            [100, 100, 102],
+        ]);
+        assert_eq!(bits, 0);
+        assert!(dist2(bg, [100, 100, 100]) < 4);
     }
 
     #[test]
