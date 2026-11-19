@@ -201,7 +201,7 @@ default_agent = "reviewer"    # agent to send to when there's a choice
 chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # use this browser instead of Chrome for Testing
 max_chars = 20000             # longest page text sent to an agent
 home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
-view_renderer = "blocks"      # if the view stays blank in your terminal
+view_renderer = "blocks"      # if the view stays blank in your terminal ("kitty", "octants" or "blocks")
 cell_aspect = 2.6             # if the page looks stretched
 scale = 2                     # herdr desktop on Linux or Windows: your screen's scale, if it isn't 1
 ```
@@ -209,7 +209,7 @@ scale = 2                     # herdr desktop on Linux or Windows: your screen's
 ## Troubleshooting
 
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
-- **The view is low-resolution blocks on Windows.** Outside herdr desktop the view can't ask the terminal whether it shows images, so it draws blocks. If yours does (WezTerm, or herdr running inside herdr desktop), set `view_renderer = "kitty"`.
+- **The view is drawn in blocks on Windows.** Windows Terminal can't show the images herdr passes through, so outside herdr desktop the view draws the page with octant characters (2x4 pixels a cell) and lays it out at least 640 px wide. Headings and buttons read well; zoom the view's pane (or give it a wide split) to read body text. If your terminal shows Kitty images (WezTerm, or herdr inside herdr desktop), set `view_renderer = "kitty"`; if octants show as boxes, set `view_renderer = "blocks"`.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font on macOS, 2.25 on Linux).
 - **The page is blurry in herdr desktop on Linux or Windows.** Set `scale` to your screen's scale (2 on a HiDPI screen, 1.5 for 150%). macOS detects it.
 - **Clicking Chrome in the Dock does nothing.** The browser is using your own Chrome. Run `herdr-web-browser install-browser`.
