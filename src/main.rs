@@ -49,6 +49,9 @@ enum Cmd {
     Start {
         #[arg(long)]
         headless: bool,
+        /// Also open the status pane (herdr terminal app).
+        #[arg(long)]
+        pane: bool,
     },
     /// Close the browser.
     Stop,
@@ -58,6 +61,9 @@ enum Cmd {
     Mode {
         mode: Option<Mode>,
     },
+    /// herdr's link handler: open $HERDR_PLUGIN_CLICKED_URL with the live view.
+    #[command(hide = true)]
+    OpenLink,
     /// Navigate this pane's tab (or a new tab) to URL.
     Open {
         url: String,
@@ -285,20 +291,83 @@ fn on_pane_moved() -> R<()> {
     Ok(())
 }
 
-fn install_cli() -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?;
-    let dir = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?).join(".local/bin");
-    std::fs::create_dir_all(&dir)?;
-    let link = dir.join("herdr-web-browser");
-    match std::fs::symlink_metadata(&link) {
-        Ok(m) if m.file_type().is_symlink() => std::fs::remove_file(&link)?,
-        Ok(_) => return Err(format!("{} exists and is not a symlink; not replacing it", link.display()).into()),
-        Err(_) => {}
+/// Add `dir` to the user's PATH (HKCU\Environment), as rustup and uv do: Windows has no
+/// ~/.local/bin convention, so agents couldn't run the CLI otherwise. Keeps `%VAR%` entries
+/// unexpanded. Returns whether it changed anything.
+#[cfg(windows)]
+fn add_to_user_path(dir: &std::path::Path) -> R<bool> {
+    const SCRIPT: &str = r#"
+$d = $env:HWB_DIR
+$p = (Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+if (($p -split ';') -contains $d) { exit 0 }
+Set-ItemProperty 'HKCU:\Environment' Path ((($p.TrimEnd(';'), $d) -ne '') -join ';') -Type ExpandString
+# Deleting an unset variable is how .NET broadcasts WM_SETTINGCHANGE, so Explorer sees the new PATH.
+[Environment]::SetEnvironmentVariable('HWB_PATH_CHANGED', $null, 'User')
+'added'
+"#;
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .env("HWB_DIR", dir)
+        .stdin(std::process::Stdio::null())
+        .output()?;
+    if !out.status.success() {
+        return Err(format!("could not add {} to PATH: {}", dir.display(), String::from_utf8_lossy(&out.stderr).trim()).into());
     }
-    std::os::unix::fs::symlink(&exe, &link)?;
+    Ok(String::from_utf8_lossy(&out.stdout).trim() == "added")
+}
+
+/// Where install-cli puts the CLI: ~/.local/bin/herdr-web-browser (.exe on Windows).
+pub(crate) fn cli_path() -> R<PathBuf> {
+    Ok(state::home().ok_or("no home folder")?.join(".local").join("bin").join(format!("herdr-web-browser{}", std::env::consts::EXE_SUFFIX)))
+}
+
+fn install_cli() -> R<String> {
+    let exe = state::own_exe()?;
+    let link = cli_path()?;
+    let dir = link.parent().ok_or("bad CLI path")?.to_path_buf();
+    std::fs::create_dir_all(&dir)?;
+    #[cfg(unix)]
+    {
+        match std::fs::symlink_metadata(&link) {
+            Ok(m) if m.file_type().is_symlink() => std::fs::remove_file(&link)?,
+            Ok(_) => return Err(format!("{} exists and is not a symlink; not replacing it", link.display()).into()),
+            Err(_) => {}
+        }
+        std::os::unix::fs::symlink(&exe, &link)?;
+    }
+    // Symlinks need admin or developer mode on Windows, so copy, and leave a note of the
+    // checkout so the copy still finds the extension and mods. A running copy (an agent mid-command)
+    // can't be overwritten but can be renamed out of the way.
+    #[cfg(windows)]
+    {
+        if link == exe {
+            return Ok(format!("{} is the installed copy; run install-cli from the plugin build", exe.display()));
+        }
+        // Clear earlier copies once nothing runs them; the one renamed now may still be running.
+        for old in std::fs::read_dir(&dir)?.flatten().map(|e| e.path()) {
+            if old.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("herdr-web-browser.exe.") && n.ends_with(".old")) {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+        if link.exists() {
+            std::fs::rename(&link, link.with_extension(format!("exe.{}.old", std::process::id())))?;
+        }
+        std::fs::copy(&exe, &link)?;
+        std::fs::write(state::root_note(&link), state::plugin_root().display().to_string())?;
+    }
     let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).any(|p| p == dir);
-    let hint = if on_path { "" } else { " (add ~/.local/bin to PATH)" };
-    Ok(format!("linked {} -> {}{hint}", link.display(), exe.display()))
+    #[cfg(windows)]
+    let hint = if on_path {
+        String::new()
+    } else if add_to_user_path(&dir)? {
+        format!(" (added {} to your PATH; restart herdr and terminals to pick it up)", dir.display())
+    } else {
+        String::new() // already in the user PATH; this process just started before it was added
+    };
+    #[cfg(not(windows))]
+    let hint = if on_path { String::new() } else { format!(" (add {} to PATH)", dir.display()) };
+    let verb = if cfg!(windows) { "copied" } else { "linked" };
+    Ok(format!("{verb} {} -> {}{hint}", link.display(), exe.display()))
 }
 
 const DESKTOP_MODS: &[&str] =
@@ -306,9 +375,7 @@ const DESKTOP_MODS: &[&str] =
 
 /// Herdr.app's home folder (mods, programs.json).
 pub(crate) fn desktop_home() -> PathBuf {
-    std::env::var_os("HERDR_APP_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config/herdr-app"))
+    std::env::var_os("HERDR_APP_HOME").map(PathBuf::from).unwrap_or_else(|| state::home().unwrap_or_default().join(".config/herdr-app"))
 }
 
 /// Whether herdr desktop's installed menu mod launches `exe` (false when it isn't installed).
@@ -319,7 +386,7 @@ fn desktop_runs(home: &std::path::Path, exe: &std::path::Path) -> bool {
 
 /// Copy the desktop mods into Herdr.app's home with this binary's path baked in, then check them.
 fn install_desktop() -> R<String> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?;
+    let exe = state::own_exe()?;
     let home = desktop_home();
     if !home.is_dir() {
         return Err(format!("{} not found; is herdr desktop installed?", home.display()).into());
@@ -355,7 +422,8 @@ fn install_desktop() -> R<String> {
     Ok(format!("installed {} into {}; {key}", DESKTOP_MODS.join(", "), home.join("mods").display()))
 }
 
-pub(crate) const MENU_KEY: &str = "cmd-shift-b";
+// herdr desktop on Windows uses ctrl shortcuts, and ctrl-shift-b toggles its sidebar.
+pub(crate) const MENU_KEY: &str = if cfg!(windows) { "ctrl-alt-b" } else { "cmd-shift-b" };
 pub(crate) const MENU_ACTION: &str = "mod.open:herdr-web-browser";
 
 #[derive(Debug, PartialEq)]
@@ -392,7 +460,7 @@ fn read_json(path: &std::path::Path) -> R<Value> {
 /// Give the live view its own name and icon in herdr desktop (instead of a generic terminal),
 /// merged into the user's programs.json without touching their other entries.
 fn register_program(home: &std::path::Path) -> R<()> {
-    let exe = std::fs::canonicalize(std::env::current_exe()?)?.display().to_string();
+    let exe = state::own_exe()?.display().to_string();
     let path = home.join("programs.json");
     let mut doc = read_json(&path)?;
     let programs = doc.as_object_mut().ok_or("programs.json is not an object")?.entry("programs").or_insert_with(|| json!({}));
@@ -413,12 +481,15 @@ fn run(cli: Cli) -> R<()> {
     let cfg = Config::load()?;
     let page = |create| page::resolve(&cfg, cli.tab, create);
     match cli.cmd {
-        Cmd::Start { headless } => {
+        Cmd::Start { headless, pane } => {
             let url = match chrome::endpoint() {
                 Some(u) => u,
                 None if headless => chrome::launch(Mode::Headless, &cfg)?,
                 None => chrome::ensure(&cfg)?,
             };
+            if pane {
+                host::herdr(&["plugin", "pane", "open", "--plugin", state::PLUGIN_ID, "--entrypoint", "browser"])?;
+            }
             print(j, format!("running at {url}"), json!({ "endpoint": url }));
         }
         Cmd::Stop => {
@@ -443,6 +514,10 @@ fn run(cli: Cli) -> R<()> {
             });
             chrome::switch_mode(mode, &cfg)?;
             print(j, format!("mode: {mode:?}").to_lowercase(), json!({ "mode": mode }));
+        }
+        Cmd::OpenLink => {
+            let url = std::env::var("HERDR_PLUGIN_CLICKED_URL").map_err(|_| "HERDR_PLUGIN_CLICKED_URL not set")?;
+            return run(Cli { cmd: Cmd::Open { url, new_tab: false, show: true }, ..cli });
         }
         Cmd::Open { url, new_tab, show } => {
             let mut p = page(true)?;
@@ -561,7 +636,7 @@ fn run(cli: Cli) -> R<()> {
         }
         Cmd::Screenshot { path } => {
             std::fs::write(&path, page(true)?.screenshot()?)?;
-            let abs = std::fs::canonicalize(&path)?;
+            let abs = if cfg!(windows) { std::path::absolute(&path)? } else { std::fs::canonicalize(&path)? };
             print(j, abs.display().to_string(), json!({ "path": abs }));
         }
         Cmd::Wait { css, timeout } => {
@@ -602,7 +677,7 @@ fn run(cli: Cli) -> R<()> {
             let mut msg = install_cli()?;
             // herdr runs this at startup: (re)install herdr desktop's mods unless they already run this
             // binary, so a dev build (or an old install) never stays wired in after the plugin updates.
-            let exe = std::fs::canonicalize(std::env::current_exe()?)?;
+            let exe = state::own_exe()?;
             if desktop_home().is_dir() && !desktop_runs(&desktop_home(), &exe) {
                 match install_desktop() {
                     Ok(m) => msg = format!("{msg}\n{m}"),
@@ -614,8 +689,10 @@ fn run(cli: Cli) -> R<()> {
                 Ok(m) => msg = format!("{msg}\n{m}"),
                 Err(e) => msg = format!("{msg}\nagent setup skipped: {e}"),
             }
-            if browser_install::installed().is_none() {
+            if browser_install::available() && browser_install::installed().is_none() {
                 // ~200 MB download: run it in the background so herdr's startup isn't held up.
+                #[cfg(windows)]
+                chrome::keep_std_handles_from_children();
                 std::process::Command::new(std::env::current_exe()?)
                     .arg("install-browser")
                     .stdin(std::process::Stdio::null())

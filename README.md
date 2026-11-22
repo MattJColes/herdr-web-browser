@@ -39,9 +39,19 @@ It runs its own copy of Chrome ([Chrome for Testing](https://developer.chrome.co
 ## What you need
 
 - herdr desktop, or herdr 0.9 or newer
-- macOS (Apple silicon or Intel) or Linux x86-64 for the browser it downloads; elsewhere, Google Chrome, Chromium, Microsoft Edge or Brave
+- macOS (Apple silicon or Intel), Linux x86-64 or Windows x64 for the browser it downloads; elsewhere (including Windows on ARM), Google Chrome, Chromium, Microsoft Edge or Brave
 - Rust, to build it (`cargo`)
-- macOS or Linux
+- macOS, Linux or Windows
+
+### On Windows
+
+Windows 11 works, on x64 and, with a few limits, on ARM[^arm]:
+
+- **Live view.** Sharp in herdr desktop. The herdr terminal app runs in Windows Terminal, which can't show images, so the page is drawn with block characters: zoom the pane to read it, or click the window button for a real Chrome window.
+- **Ctrl-click links.** Windows Terminal opens links itself. Set `"experimental.detectURLs": false` in its `settings.json` so herdr gets the click.
+- **Logins.** Importing logins from Chrome doesn't work (see [below](#sign-in-with-your-chrome-logins)); sign in inside the browser instead.
+
+[^arm]: On Windows on ARM there's no Chrome for Testing, so it uses your installed Chrome or Edge. herdr desktop runs there as an x64 app under emulation and its terminals don't show images yet, so the live view draws blocks in it too; `herdr-web-browser mode headed` gives you a real Chrome window. Tested on a Snapdragon X laptop with Windows 11 24H2.
 
 ## Install
 
@@ -59,7 +69,7 @@ Or from source:
 git clone https://github.com/MattJColes/herdr-web-browser
 cd herdr-web-browser
 cargo build --release
-./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin
+./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin (a copy on Windows, added to your PATH)
 herdr-web-browser install-browser                    # downloads Chrome for Testing (~200 MB) for it to use
 herdr-web-browser install-agents                     # agents use it for web previews in every project
 ```
@@ -76,7 +86,7 @@ Then set it up for the herdr you use.
 herdr-web-browser install-desktop
 ```
 
-This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon, and binds `cmd-shift-b` to open the browser's menu in `~/.config/herdr-app/keys.json`. It leaves the shortcut alone if you already bound the menu to another key or use `cmd-shift-b` for something else. herdr runs it automatically the first time it starts with herdr desktop installed.
+This adds **Browser** to herdr desktop's + menu, plus the browser's own menu, agent picker and icon, and binds `cmd-shift-b` (`ctrl-alt-b` on Windows) to open the browser's menu in `~/.config/herdr-app/keys.json`. It leaves the shortcut alone if you already bound the menu to another key or use that shortcut for something else. herdr runs it automatically the first time it starts with herdr desktop installed.
 
 **herdr (terminal app)**
 
@@ -117,7 +127,7 @@ herdr-web-browser uninstall          # add --purge to also delete its profile, l
 herdr plugin uninstall herdr-web-browser
 ```
 
-`uninstall` stops the browser, removes the agent skill and its section from each agent's `AGENTS.md` (the rest of the file is left alone), removes the herdr desktop mods and the + menu entry, and removes the `herdr-web-browser` link from `~/.local/bin`. If you installed from source, run `herdr plugin unlink herdr-web-browser` instead of `herdr plugin uninstall`, then delete the folder.
+`uninstall` stops the browser, removes the agent skill and its section from each agent's `AGENTS.md` (the rest of the file is left alone), removes the herdr desktop mods and the + menu entry, and removes the `herdr-web-browser` link from `~/.local/bin` (on Windows, its copy and the native messaging registry keys). If you installed from source, run `herdr plugin unlink herdr-web-browser` instead of `herdr plugin uninstall`, then delete the folder.
 
 ## Open the browser
 
@@ -180,6 +190,8 @@ herdr-web-browser import-logins --all            # everything (think twice)
 
 This copies cookies from the Chrome profile you used last; the dialog lets you pick another, and so does `--profile "Profile 1"` (`--profiles` lists them). Chrome encrypts them with a key from your keychain, so they're decrypted with that key and handed to the browser, which stores them its own way. Nothing is written to disk in between. It reads Google Chrome only (not Chromium, Edge or Brave) and uses the `sqlite3` tool that comes with macOS. Sites that keep your login somewhere other than cookies, or tie it to one browser, may still ask you to sign in.
 
+Importing logins doesn't work on Windows: Chrome there encrypts cookies with a key only Chrome itself can get at (app-bound encryption). Sign in inside the browser instead.
+
 **Every agent that uses the browser can act as you on the sites you import.** Import only what you're happy to share.
 
 ## Which agent gets what you send
@@ -192,26 +204,27 @@ This copies cookies from the Chrome profile you used last; the dialog lets you p
 
 ## Settings
 
-Optional. Put them in `~/.config/herdr/plugins/config/herdr-web-browser/config.toml`:
+Optional. Put them in `~/.config/herdr/plugins/config/herdr-web-browser/config.toml` (on Windows, `%APPDATA%\herdr\plugins\config\herdr-web-browser\config.toml`):
 
 ```toml
 default_agent = "reviewer"    # agent to send to when there's a choice
 chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # use this browser instead of Chrome for Testing
 max_chars = 20000             # longest page text sent to an agent
 home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
-view_renderer = "blocks"      # if the view stays blank in your terminal
+view_renderer = "blocks"      # if the view stays blank in your terminal ("kitty", "octants" or "blocks")
 cell_aspect = 2.6             # if the page looks stretched
-scale = 2                     # herdr desktop on Linux: your screen's scale, if it isn't 1
+scale = 2                     # herdr desktop on Linux or Windows: your screen's scale, if it isn't 1
 ```
 
 ## Troubleshooting
 
 - **The view is blank.** Your terminal may not support images. Set `view_renderer = "blocks"` for a low-resolution fallback, or use herdr desktop, Ghostty, kitty or WezTerm.
+- **The view is drawn in blocks on Windows.** See [On Windows](#on-windows). In Windows Terminal it uses octant characters (2x4 pixels a cell); if they show as boxes, set `view_renderer = "blocks"`. If your terminal does show Kitty images, set `view_renderer = "kitty"`.
 - **The page looks stretched.** Set `cell_aspect` to your terminal's cell height divided by its width (about 2.6 for herdr desktop's default font on macOS, 2.25 on Linux).
-- **The page is blurry in herdr desktop on Linux.** Set `scale` to your screen's scale (2 on a HiDPI screen, 1.5 for 150%). macOS detects it.
+- **The page is blurry in herdr desktop on Linux or Windows.** Set `scale` to your screen's scale (2 on a HiDPI screen, 1.5 for 150%). macOS detects it.
 - **Clicking Chrome in the Dock does nothing.** The browser is using your own Chrome. Run `herdr-web-browser install-browser`.
 - **"No Chrome found".** Run `herdr-web-browser install-browser`, or set `chrome_path`.
-- **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden.
+- **Want a real window?** Click the window button, or run `herdr-web-browser mode headed`. Chrome only shows a window when you ask; anything that starts the browser by itself starts it hidden. On Windows the window opens behind the one you're using; click it in the taskbar.
 
 ## For agents
 
@@ -235,7 +248,7 @@ herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you 
 
 ## Privacy and safety
 
-- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-web-browser/`). Every agent that uses the browser can reach any site you sign in to there, or import from Chrome, so only do that for sites you're happy for agents to use.
+- The browser has its own profile (in `~/.local/state/herdr/plugins/herdr-web-browser/`, or `%LOCALAPPDATA%\herdr\plugins\herdr-web-browser\` on Windows). Every agent that uses the browser can reach any site you sign in to there, or import from Chrome, so only do that for sites you're happy for agents to use.
 - Chrome's control port only accepts connections from your own machine.
 - Web pages can't send messages to your agent. Only you can, through the view, the right-click menu or herdr.
 - Anything sent to an agent is labelled as web content, so the agent knows not to follow instructions written on the page. So is `console` output, which the page itself can write.
