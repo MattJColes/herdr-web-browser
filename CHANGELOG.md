@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.4.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.3...v1.4.0) (2026-11-23)
+
+
+### Features
+
+* add ~/.local/bin to the user PATH on Windows in install-cli ([828515e](https://github.com/MattJColes/herdr-web-browser/commit/828515ec87c4a924b96fe1388e2658918b11dbf3))
+* find Chrome, Edge, Brave and Chromium on Windows and download Chrome for Testing win64 ([d00aa48](https://github.com/MattJColes/herdr-web-browser/commit/d00aa4857c9a3aeb1f34b6fb48e16e8bd100d050))
+* native Windows support ([2f59160](https://github.com/MattJColes/herdr-web-browser/commit/2f5916006fa1fac0666457778bf38218802a656e))
+* register the native messaging host in the Windows registry ([9d17db9](https://github.com/MattJColes/herdr-web-browser/commit/9d17db9c6865ac2b2ae50c9eb483914ee81a9f7c))
+* run plugin actions without /bin/sh and list windows in platforms ([6047d7a](https://github.com/MattJColes/herdr-web-browser/commit/6047d7ad912fd0e9ede080db9b1fec6f7a572cc0))
+* sharper live view in Windows Terminal with octant characters ([a50bf16](https://github.com/MattJColes/herdr-web-browser/commit/a50bf161242b773af5ccc67bc60e9513968e881e))
+
+
+### Bug Fixes
+
+* bind the herdr desktop browser menu to ctrl-alt-b on Windows ([c0a078d](https://github.com/MattJColes/herdr-web-browser/commit/c0a078dff42dc81b01ae75278ef19c9897768094))
+* bring headed tab to front before click and type ([273c229](https://github.com/MattJColes/herdr-web-browser/commit/273c22979b176c207355a43e5938fe66949d1f3e))
+* bring headed tab to front before click and type ([287f7e9](https://github.com/MattJColes/herdr-web-browser/commit/287f7e9dc80aa4822dcaa2705d3e8f9b5379a5ab))
+* build Windows paths from components so they print with one separator ([c5b27a3](https://github.com/MattJColes/herdr-web-browser/commit/c5b27a3de489d3a802f9827be72c4a6bf05c6b9c))
+* compile on Windows and use Windows home, state and config paths ([16cfc9a](https://github.com/MattJColes/herdr-web-browser/commit/16cfc9a730cf3e61ece2ec896d331321354f6650))
+* half-block live view in herdr desktop on Windows on ARM ([f3656f6](https://github.com/MattJColes/herdr-web-browser/commit/f3656f68c890f6234f71b3c673b25b174a674284))
+* keep Edge from signing in to the Windows account and syncing ([8fd9e42](https://github.com/MattJColes/herdr-web-browser/commit/8fd9e4229db535137f41ddbbb03bb02ded0c7154))
+* let cargo rebuild while herdr panes run the Windows exe ([f2572c6](https://github.com/MattJColes/herdr-web-browser/commit/f2572c6f2658458906c6d4fd38e8e69e2d088550))
+* quote the live view command for PowerShell in herdr panes on Windows ([382b910](https://github.com/MattJColes/herdr-web-browser/commit/382b9103cac58572c035ad5856e1a2012f5ef6db))
+* stop Chrome holding the caller's output pipe open on Windows ([00bb5b3](https://github.com/MattJColes/herdr-web-browser/commit/00bb5b37780c12388fa096a8ac1240eb52f5273f))
+* stop install-cli from changing agent instructions ([7090688](https://github.com/MattJColes/herdr-web-browser/commit/7090688a9bff4f0993495aad44e16d86f2ccd21e))
+* stop install-cli from changing agent instructions ([06b8a22](https://github.com/MattJColes/herdr-web-browser/commit/06b8a225884352d09b765a88168450f78581c7a0)), closes [#30](https://github.com/MattJColes/herdr-web-browser/issues/30)
+
 ## [1.3.3](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.2...v1.3.3) (2026-11-18)
 
 
