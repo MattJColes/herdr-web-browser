@@ -61,7 +61,7 @@ From herdr's [plugin marketplace](https://herdr.dev/plugins/), in the herdr term
 herdr plugin install MattJColes/herdr-web-browser   # builds it with cargo, so you need Rust
 ```
 
-Each time herdr starts it puts the `herdr-web-browser` command on your PATH and runs `herdr-web-browser install-agents`. The first start also downloads Chrome for Testing in the background (`install-browser`) and, if herdr desktop is installed, runs `install-desktop`. All of them also appear as **Browser:** actions and are explained below.
+Each time herdr starts it runs `herdr-web-browser startup`, which puts the `herdr-web-browser` command on your PATH and runs `herdr-web-browser install-agents`. The first start also downloads Chrome for Testing in the background (`install-browser`) and, if herdr desktop is installed, runs `install-desktop`. All of them also appear as **Browser:** actions and are explained below. To keep your agents' instruction files as they are, set `install_agents = false` in [config.toml](#settings) before the first start.
 
 Or from source:
 
@@ -69,14 +69,14 @@ Or from source:
 git clone https://github.com/MattJColes/herdr-web-browser
 cd herdr-web-browser
 cargo build --release
-./target/release/herdr-web-browser install-cli       # puts `herdr-web-browser` in ~/.local/bin (a copy on Windows, added to your PATH)
+./target/release/herdr-web-browser install-cli       # only puts `herdr-web-browser` in ~/.local/bin (a copy on Windows, added to your PATH)
 herdr-web-browser install-browser                    # downloads Chrome for Testing (~200 MB) for it to use
 herdr-web-browser install-agents                     # agents use it for web previews in every project
 ```
 
 `install-browser` gives herdr-web-browser its own copy of Chrome: Google's [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing), a separate app built for automation. Without it, the browser borrows your installed Chrome, and on macOS a hidden Chrome takes over the Chrome app, so clicking Chrome in the Dock does nothing. Run it again to update. While the browser runs, "Google Chrome for Testing" shows in the Dock.
 
-`install-agents` adds a Claude Code skill (`~/.claude/skills/herdr-web-browser/`) and a short section to the global instructions of Codex (`~/.codex/AGENTS.md`), OpenCode (`~/.config/opencode/AGENTS.md`) and Pi (`~/.pi/agent/AGENTS.md`), for whichever of them you have. Now "show me the page" or "open localhost:3000" opens this browser in any project. Run it again after updating; it replaces its own section and leaves the rest of the file alone.
+`install-agents` adds a Claude Code skill (`~/.claude/skills/herdr-web-browser/`) and a short section to the global instructions of Codex (`~/.codex/AGENTS.md`), OpenCode (`~/.config/opencode/AGENTS.md`) and Pi (`~/.pi/agent/AGENTS.md`), for whichever of them you have. Now "show me the page" or "open localhost:3000" opens this browser in any project. Run it again after updating; it replaces its own section and leaves the rest of the file alone. `herdr-web-browser uninstall-agents` takes the skill and sections out again and keeps the browser; if herdr runs the plugin, also set `install_agents = false`, or the next start puts them back.
 
 Then set it up for the herdr you use.
 
@@ -214,6 +214,7 @@ home_page = "https://www.google.com"   # what a new Browser from the + menu open
 view_renderer = "blocks"      # if the view stays blank in your terminal ("kitty", "octants" or "blocks")
 cell_aspect = 2.6             # if the page looks stretched
 scale = 2                     # herdr desktop on Linux or Windows: your screen's scale, if it isn't 1
+install_agents = false        # herdr's startup leaves your agents' instruction files alone
 ```
 
 ## Troubleshooting

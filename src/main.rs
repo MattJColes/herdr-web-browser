@@ -150,12 +150,17 @@ enum Cmd {
         #[arg(long)]
         clear: bool,
     },
-    /// Symlink this binary into ~/.local/bin.
+    /// Symlink this binary into ~/.local/bin (a copy on Windows). Nothing else.
     InstallCli,
+    /// What herdr runs at startup: install-cli, install-agents (unless `install_agents = false` in
+    /// config.toml), install-desktop when herdr desktop needs it, and install-browser the first time.
+    Startup,
     /// Install the herdr desktop mods (menu, picker, toast) into ~/.config/herdr-app/mods.
     InstallDesktop,
     /// Teach Claude Code, Codex, OpenCode and Pi to use this browser for web pages, in every project.
     InstallAgents,
+    /// Remove the agent skill and instructions that install-agents added, keeping the browser.
+    UninstallAgents,
     /// Download Chrome for Testing for this browser, so it never takes over your own Chrome app.
     InstallBrowser,
     /// Undo the install-* commands: agent instructions, desktop mods, the CLI link. Then run
@@ -674,6 +679,10 @@ fn run(cli: Cli) -> R<()> {
             print(j, t.clone().unwrap_or_else(|| "auto".into()), json!({ "target": t }));
         }
         Cmd::InstallCli => {
+            let msg = install_cli()?;
+            print(j, msg.clone(), json!({ "message": msg }));
+        }
+        Cmd::Startup => {
             let mut msg = install_cli()?;
             // herdr runs this at startup: (re)install herdr desktop's mods unless they already run this
             // binary, so a dev build (or an old install) never stays wired in after the plugin updates.
@@ -685,9 +694,11 @@ fn run(cli: Cli) -> R<()> {
                 }
             }
             // Every start, so agents get the current skill after an update; it only rewrites its own section.
-            match agent_setup::install_agents() {
-                Ok(m) => msg = format!("{msg}\n{m}"),
-                Err(e) => msg = format!("{msg}\nagent setup skipped: {e}"),
+            if cfg.install_agents != Some(false) {
+                match agent_setup::install_agents() {
+                    Ok(m) => msg = format!("{msg}\n{m}"),
+                    Err(e) => msg = format!("{msg}\nagent setup skipped: {e}"),
+                }
             }
             if browser_install::available() && browser_install::installed().is_none() {
                 // ~200 MB download: run it in the background so herdr's startup isn't held up.
@@ -747,6 +758,11 @@ fn run(cli: Cli) -> R<()> {
         Cmd::InstallAgents => {
             let msg = agent_setup::install_agents()?;
             print(j, msg.clone(), json!({ "message": msg }));
+        }
+        Cmd::UninstallAgents => {
+            let done = agent_setup::uninstall_agents()?;
+            let text = if done.is_empty() { "nothing to remove".to_string() } else { done.join("\n") };
+            print(j, text, json!({ "removed": done }));
         }
         Cmd::View { own_tab } => {
             if own_tab
