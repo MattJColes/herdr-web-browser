@@ -212,6 +212,16 @@ impl Page {
         Ok(())
     }
 
+    /// Headed tabs share a window, so a pane's tab is usually a hidden background tab:
+    /// hidden pages don't paint and Chrome drops synthetic input to them. Headless tabs
+    /// each have their own window and stay visible, so leave those alone.
+    fn front_if_headed(&mut self) -> R<()> {
+        if state::load()?.mode != Some(state::Mode::Headless) {
+            self.activate()?;
+        }
+        Ok(())
+    }
+
     pub fn text(&mut self) -> R<String> {
         Ok(self.eval("document.body ? document.body.innerText : ''")?.as_str().unwrap_or_default().to_string())
     }
@@ -239,6 +249,7 @@ impl Page {
 
     /// Real (trusted) mouse click at the element's centre.
     pub fn click(&mut self, target: &str) -> R<()> {
+        self.front_if_headed()?;
         let (x, y) = self.locate(target)?;
         for kind in ["mouseMoved", "mousePressed", "mouseReleased"] {
             self.call("Input.dispatchMouseEvent", json!({ "type": kind, "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1 }))?;
@@ -250,6 +261,7 @@ impl Page {
 
     /// Replace the field's contents with `text` (fill semantics), optionally pressing Enter.
     pub fn type_text(&mut self, target: &str, text: &str, submit: bool) -> R<()> {
+        self.front_if_headed()?;
         let t = serde_json::to_string(target)?;
         self.eval(&script(
             "",
@@ -275,10 +287,7 @@ impl Page {
 
     pub fn screenshot(&mut self) -> R<Vec<u8>> {
         use base64::Engine;
-        // Background tabs in a headed browser don't paint, so bring it forward first.
-        if state::load()?.mode != Some(state::Mode::Headless) {
-            self.activate()?;
-        }
+        self.front_if_headed()?;
         let r = self.call("Page.captureScreenshot", json!({ "format": "png" }))?;
         let data = r["data"].as_str().ok_or("captureScreenshot returned no data")?;
         Ok(base64::engine::general_purpose::STANDARD.decode(data)?)
