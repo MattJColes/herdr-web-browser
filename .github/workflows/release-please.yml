@@ -19,6 +19,22 @@ jobs:
       pull-requests: write
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Thank everyone but the owner and bots whose pull requests made the release. GitHub's
+      # generated notes list each pull request since the previous release "by @author".
+      - name: Thank contributors
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          notes=$(gh api "repos/$GH_REPO/releases/generate-notes" -f tag_name="$TAG" --jq .body)
+          authors=$(grep -oE 'by @[A-Za-z0-9-]+(\[bot\])?' <<<"$notes" | cut -c4- | sort -u | grep -vE "^@($OWNER\$|.*\[bot\]\$)" || true)
+          [ -n "$authors" ] || exit 0
+          body=$(gh release view "$TAG" --json body --jq .body)
+          gh release edit "$TAG" --notes "$body"$'\n\n'"Thanks to $(paste -sd, - <<<"$authors" | sed 's/,/, /g') for contributing to this release."
