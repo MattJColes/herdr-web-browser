@@ -88,23 +88,51 @@ fn desktop_cells(cfg: &Config) -> Option<Cells> {
             .clamp(0.8, 2.0)
     };
     let scale = display_scale(cfg).unwrap_or(1.0);
-    Some(desktop_cell_size(fs, setting("terminal_line_height"), setting("terminal_cell_width"), scale, cfg!(target_os = "macos")))
+    let (line_height, cell_width) = (setting("terminal_line_height"), setting("terminal_cell_width"));
+    let font = settings.as_deref().and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()).and_then(|v| v["font"].as_str().map(String::from));
+    if let Some((advance, line)) = font.as_deref().and_then(|f| font_metrics(f, fs)) {
+        return Some(measured_cell_size(advance, line, line_height, cell_width, scale));
+    }
+    Some(desktop_cell_size(fs, line_height, cell_width, scale))
+}
+
+/// herdr desktop's cell from the configured font's own metrics: its advance and its line
+/// height (ascender + descender + leading), each times herdr's multiplier and the screen's
+/// scale, rounded to whole device px as herdr draws them. Measured on macOS at 2x: FiraCode
+/// Nerd Font Mono 14 (8.615 x 17.23 pt) draws 17 x 34 px cells, Menlo 14 (8.43 x 16.30 pt)
+/// 17 x 33, JetBrains Mono 14 (8.4 x 18.48 pt) 17 x 37.
+pub fn measured_cell_size(advance: f64, line: f64, line_height: f64, cell_width: f64, scale: f64) -> Cells {
+    let (w, h) = ((advance * cell_width * scale).round(), (line * line_height * scale).round());
+    Cells { w, h, dpr: scale, img_w: w }
+}
+
+/// `font`'s advance and line height in points at `size`, from AppKit. None off macOS, or when
+/// the family isn't installed: herdr's bundled JetBrains Mono isn't, and falls back to
+/// `desktop_cell_size`.
+fn font_metrics(font: &str, size: f64) -> Option<(f64, f64)> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let js = format!(
+        "ObjC.import('AppKit'); var f = $.NSFontManager.sharedFontManager.fontWithFamilyTraitsWeightSize({}, 0, 5, {size}); \
+         f.isNil() ? '' : [f.advancementForGlyph(f.glyphWithName('zero')).width, f.ascender - f.descender + f.leading].join(' ')",
+        serde_json::to_string(font).ok()?
+    );
+    let out = std::process::Command::new("osascript").args(["-l", "JavaScript", "-e", &js]).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut it = text.split_whitespace().map(|n| n.parse::<f64>().ok());
+    let (advance, line) = (it.next()??, it.next()??);
+    (advance > 0.0 && line > 0.0).then_some((advance, line))
 }
 
 /// herdr desktop's terminal cell in device px, from its font size (zoom included), its
 /// `terminal_line_height` / `terminal_cell_width` multipliers and the screen's scale.
 /// The device pixel ratio is the screen's scale, never guessed from the cell size: a zoomed
 /// or large font has tall cells on a 1x screen too.
-pub fn desktop_cell_size(font_size: f64, line_height: f64, cell_width: f64, scale: f64, macos: bool) -> Cells {
-    let (w, h) = if macos {
-        // Measured on macOS with herdr's default JetBrains Mono.
-        (font_size * 0.6 * cell_width * scale, font_size * 22.0 / 14.0 * line_height * scale)
-    } else {
-        // Linux draws whole-pixel cells from the font's advance (0.6 em) and line height
-        // (1.32 em for JetBrains Mono): 8 x 18 px at 14 px, measured on a 1x screen.
-        ((font_size * 0.6 * cell_width * scale).round(), (font_size * 1.32 * line_height * scale).round())
-    };
-    Cells { w, h, dpr: scale, img_w: w }
+/// Uses herdr's default JetBrains Mono (0.6 em advance, 1.32 em line), rounded to whole device
+/// px: 8 x 18 px at 14 px on a 1x Linux screen, 17 x 37 px at 14 pt on a 2x Mac.
+pub fn desktop_cell_size(font_size: f64, line_height: f64, cell_width: f64, scale: f64) -> Cells {
+    measured_cell_size(font_size * 0.6, font_size * 1.32, line_height, cell_width, scale)
 }
 
 /// The configured `scale`, else the screen's backing scale.
@@ -553,24 +581,35 @@ mod tests {
     fn linux_desktop_cells_match_what_herdr_draws() {
         // herdr desktop on Linux, JetBrains Mono 14 at zoom 1: 235 columns span 1880 px,
         // 49 rows span 882 px.
-        let c = desktop_cell_size(14.0, 1.0, 1.0, 1.0, false);
+        let c = desktop_cell_size(14.0, 1.0, 1.0, 1.0);
         assert_eq!((c.w, c.h, c.dpr), (8.0, 18.0, 1.0));
     }
 
     #[test]
     fn zoom_is_not_mistaken_for_a_retina_screen() {
         // Zoom 1.4 makes cells taller than 28 px; the screen is still 1x.
-        let c = desktop_cell_size(19.6, 1.0, 1.0, 1.0, false);
+        let c = desktop_cell_size(19.6, 1.0, 1.0, 1.0);
         assert_eq!(c.dpr, 1.0);
         assert_eq!((c.w, c.h), (12.0, 26.0));
     }
 
     #[test]
     fn desktop_cells_follow_scale_and_multipliers() {
-        let c = desktop_cell_size(14.0, 1.2, 1.0, 2.0, false);
+        let c = desktop_cell_size(14.0, 1.2, 1.0, 2.0);
         assert_eq!((c.w, c.h, c.dpr), (17.0, 44.0, 2.0));
-        let mac = desktop_cell_size(14.0, 1.0, 1.0, 2.0, true);
-        assert_eq!((mac.w, mac.h, mac.dpr), (16.8, 44.0, 2.0));
+        // herdr desktop on macOS at 2x, JetBrains Mono 14: 17 x 37 px cells.
+        let mac = desktop_cell_size(14.0, 1.0, 1.0, 2.0);
+        assert_eq!((mac.w, mac.h, mac.dpr), (17.0, 37.0, 2.0));
+    }
+
+    #[test]
+    fn measured_cells_round_to_whole_device_pixels() {
+        let fira = measured_cell_size(8.615, 17.231, 1.0, 1.0, 2.0);
+        assert_eq!((fira.w, fira.h, fira.dpr, fira.img_w), (17.0, 34.0, 2.0, 17.0));
+        let menlo = measured_cell_size(8.429, 16.297, 1.0, 1.0, 2.0);
+        assert_eq!((menlo.w, menlo.h), (17.0, 33.0));
+        let taller = measured_cell_size(8.615, 17.231, 1.2, 1.0, 2.0);
+        assert_eq!(taller.h, 41.0);
     }
 
     #[test]

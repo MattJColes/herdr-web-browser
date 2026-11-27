@@ -341,13 +341,15 @@ mod tests {
     use serde_json::json;
     #[test]
     fn sh_word_keeps_safe_words_bare_for_nushell() {
-        assert_eq!(super::sh_word("/home/u/.config/herdr/x-1/target/release/herdr-web-browser"), "/home/u/.config/herdr/x-1/target/release/herdr-web-browser");
+        assert_eq!(
+            super::sh_word("/home/u/.config/herdr/x-1/target/release/herdr-web-browser"),
+            "/home/u/.config/herdr/x-1/target/release/herdr-web-browser"
+        );
         assert_eq!(super::sh_word("w4:p14"), "w4:p14");
         assert_eq!(super::sh_word("a b"), "'a b'");
         assert_eq!(super::sh_word("it's"), r"'it'\''s'");
         assert_eq!(super::sh_word(""), "''");
     }
-
 
     #[test]
     fn desktop_agents_are_terminals_with_status() {
