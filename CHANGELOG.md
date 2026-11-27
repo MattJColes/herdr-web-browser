@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.1](https://github.com/MattJColes/herdr-web-browser/compare/v1.4.0...v1.4.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **deps:** Bump the cargo-minor-and-patch group with 2 updates ([c48c41f](https://github.com/MattJColes/herdr-web-browser/commit/c48c41f858c6cd0d1318ff8dba84df954c5bc38d))
+* **deps:** Bump the cargo-minor-and-patch group with 2 updates ([8d7866a](https://github.com/MattJColes/herdr-web-browser/commit/8d7866a3e49d75755fa80d9d71e12ba473e50ad8))
+* open the + menu browser beside an agent in its own space ([9d406d3](https://github.com/MattJColes/herdr-web-browser/commit/9d406d3ed0ac7f2855d12e12d9ad79e87869523b))
+* open the + menu browser beside an agent in its own space ([1b29603](https://github.com/MattJColes/herdr-web-browser/commit/1b296035c9d38169ac197ec0b3105ea8616a3ef2))
+* run the live view in nushell panes ([0a6c6a2](https://github.com/MattJColes/herdr-web-browser/commit/0a6c6a28eaffba8a24ccf4f6d40a42748f563e5a))
+* run the live view in nushell panes ([15ab5a9](https://github.com/MattJColes/herdr-web-browser/commit/15ab5a9f44b6df4e2fb215e0a0fd0f43696059c2))
+* size herdr desktop cells from the configured font on macOS ([cacc239](https://github.com/MattJColes/herdr-web-browser/commit/cacc239cbfbcec8bc17fdb81868653eaeeb95119))
+* size herdr desktop cells from the configured font on macOS ([5dfd321](https://github.com/MattJColes/herdr-web-browser/commit/5dfd321c62a9b12f8a86cdbed5a8cd45d2fe6122))
+* stream full-resolution live view frames from headless Chrome on HiDPI screens ([ebd7477](https://github.com/MattJColes/herdr-web-browser/commit/ebd7477b76ce7d35d7fb1e0ba56b4fdd36677463))
+* stream full-resolution live view frames from headless Chrome on HiDPI screens ([012b4cd](https://github.com/MattJColes/herdr-web-browser/commit/012b4cdf9f6adb5f2fc46b36216836e1c38809c9))
+
 ## [1.4.0](https://github.com/MattJColes/herdr-web-browser/compare/v1.3.3...v1.4.0) (2026-11-23)
 
 
