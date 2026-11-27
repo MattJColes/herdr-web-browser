@@ -23,18 +23,22 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      # Thank everyone but the owner and bots whose pull requests made the release. GitHub's
-      # generated notes list each pull request since the previous release "by @author".
+      # Thank everyone but the owner and bots whose pull requests are in the release PR. GitHub's
+      # generated notes list each pull request since the previous release "by @author". The line
+      # goes above the body's last `---`, inside the notes release-please publishes on merge.
       - name: Thank contributors
-        if: steps.release.outputs.release_created == 'true'
+        if: steps.release.outputs.pr
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ steps.release.outputs.tag_name }}
+          PR: ${{ fromJSON(steps.release.outputs.pr).number }}
           OWNER: ${{ github.repository_owner }}
         run: |
-          notes=$(gh api "repos/$GH_REPO/releases/generate-notes" -f tag_name="$TAG" --jq .body)
+          prev=$(gh release view --json tagName --jq .tagName)
+          notes=$(gh api "repos/$GH_REPO/releases/generate-notes" -f tag_name=next -f target_commitish="$GITHUB_SHA" -f previous_tag_name="$prev" --jq .body)
           authors=$(grep -oE 'by @[A-Za-z0-9-]+(\[bot\])?' <<<"$notes" | cut -c4- | sort -u | grep -vE "^@($OWNER\$|.*\[bot\]\$)" || true)
-          [ -n "$authors" ] || exit 0
-          body=$(gh release view "$TAG" --json body --jq .body)
-          gh release edit "$TAG" --notes "$body"$'\n\n'"Thanks to $(paste -sd, - <<<"$authors" | sed 's/,/, /g') for contributing to this release."
+          body=$(gh pr view "$PR" --json body --jq .body)
+          [ -n "$authors" ] && ! grep -q '^Thanks to @' <<<"$body" || exit 0
+          thanks="Thanks to $(paste -sd, - <<<"$authors" | sed 's/,/, /g') for contributing to this release."
+          awk -v t="$thanks" '{ l[NR] = $0; if ($0 == "---") last = NR } END { for (i = 1; i <= NR; i++) { if (i == last) print t "\n"; print l[i] } }' <<<"$body" > body.md
+          gh pr edit "$PR" --body-file body.md
