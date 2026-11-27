@@ -87,7 +87,7 @@ fn desktop_cells(cfg: &Config) -> Option<Cells> {
             .unwrap_or(1.0)
             .clamp(0.8, 2.0)
     };
-    let scale = cfg.scale.filter(|s| (0.5..=4.0).contains(s)).or_else(screen_scale).unwrap_or(1.0);
+    let scale = display_scale(cfg).unwrap_or(1.0);
     Some(desktop_cell_size(fs, setting("terminal_line_height"), setting("terminal_cell_width"), scale, cfg!(target_os = "macos")))
 }
 
@@ -105,6 +105,11 @@ pub fn desktop_cell_size(font_size: f64, line_height: f64, cell_width: f64, scal
         ((font_size * 0.6 * cell_width * scale).round(), (font_size * 1.32 * line_height * scale).round())
     };
     Cells { w, h, dpr: scale, img_w: w }
+}
+
+/// The configured `scale`, else the screen's backing scale.
+pub fn display_scale(cfg: &Config) -> Option<f64> {
+    cfg.scale.filter(|s| (0.5..=4.0).contains(s)).or_else(screen_scale)
 }
 
 /// The screen's backing scale (2 on Retina); herdr desktop only reports logical sizes.

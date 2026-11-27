@@ -74,6 +74,18 @@ pub fn find_chrome(cfg: &Config) -> R<PathBuf> {
     Err(format!("no Chrome, Chromium, Edge or Brave found; set chrome_path in {}/config.toml", state::config_dir().display()).into())
 }
 
+/// Headless Chrome screencasts at its window's device scale and ignores the devicePixelRatio
+/// that `Emulation.setDeviceMetricsOverride` sets, so on a HiDPI screen the live view would get
+/// 1x frames stretched over the pane. Forcing the window's scale makes frames full resolution.
+/// Only measured on macOS, so other platforms keep Chrome's own scale.
+pub fn headless_args(scale: Option<f64>) -> Vec<String> {
+    let mut args = vec!["--headless=new".to_string()];
+    if let Some(s) = scale.filter(|s| *s > 1.0) {
+        args.push(format!("--force-device-scale-factor={s}"));
+    }
+    args
+}
+
 /// `DevToolsActivePort` holds the port on line 1 and the browser ws path on line 2.
 pub fn parse_port_file(s: &str) -> Option<(u16, String)> {
     let mut lines = s.lines();
@@ -189,7 +201,7 @@ pub fn launch(mode: Mode, cfg: &Config) -> R<String> {
         // stops painting them, which freezes the live view on its first frame.
         .arg("--disable-backgrounding-occluded-windows");
     if mode == Mode::Headless {
-        cmd.arg("--headless=new");
+        cmd.args(headless_args(cfg!(target_os = "macos").then(|| crate::render::display_scale(cfg)).flatten()));
     }
     // Edge on Windows signs a new profile in to the Windows account and turns on sync, which
     // would pour the user's synced data into a profile every agent drives.
@@ -375,6 +387,13 @@ fn restart_locked(mode: Mode, cfg: &Config, between: impl FnOnce() -> R<()>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn headless_forces_the_screen_scale_on_hidpi_only() {
+        assert_eq!(headless_args(None), ["--headless=new"]);
+        assert_eq!(headless_args(Some(1.0)), ["--headless=new"]);
+        assert_eq!(headless_args(Some(2.0)), ["--headless=new", "--force-device-scale-factor=2"]);
+    }
 
     #[test]
     fn parses_devtools_active_port() {
