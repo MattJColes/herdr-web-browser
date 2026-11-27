@@ -245,12 +245,22 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
                 let q = |a: &String| format!("'{}'", a.replace('\'', "''"));
                 format!("& {}", argv.iter().map(q).collect::<Vec<_>>().join(" "))
             } else {
-                let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
-                argv.iter().map(q).collect::<Vec<_>>().join(" ")
+                argv.iter().map(|a| sh_word(a)).collect::<Vec<_>>().join(" ")
             };
             herdr(&["pane", "run", pane, &cmd])?;
             Ok(format!("live view in pane {pane} (needs a terminal with Kitty graphics)"))
         }
+    }
+}
+
+/// One word for the pane's shell. Safe words stay bare: nushell reads a quoted first word as a
+/// string, not a command, so `'/path/herdr-web-browser' view` fails there while `/path/herdr-web-browser view` runs.
+/// shortcut: a path with spaces or quotes still breaks nushell panes; pass argv to herdr if it gains a launch option.
+fn sh_word(a: &str) -> String {
+    if !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "/._-:".contains(c)) {
+        a.to_string()
+    } else {
+        format!("'{}'", a.replace('\'', r"'\''"))
     }
 }
 
@@ -262,16 +272,33 @@ fn desktop_place(ls: &Value, terminal: &str) -> Option<(String, String)> {
     })
 }
 
+/// The agent the + menu's browser should sit beside: one in the space the menu opened it in
+/// (`me`'s), outside `me`'s own new tab. The last focused agent wins when it's there; herdr
+/// remembers it across spaces, so on its own it can pull the browser into another space.
+fn agent_beside(ls: &Value, last_focused: Option<&str>, me: &str) -> Option<String> {
+    let mine = |tab: &Value| tab["terminals"].as_array().into_iter().flatten().any(|t| t["terminal"] == me);
+    let space = ls["spaces"].as_array()?.iter().find(|sp| sp["tabs"].as_array().into_iter().flatten().any(mine))?;
+    let agents: Vec<String> = space["tabs"]
+        .as_array()?
+        .iter()
+        .filter(|tab| !mine(tab))
+        .flat_map(|tab| tab["terminals"].as_array().into_iter().flatten())
+        .filter(|t| t["status"].is_string())
+        .map(|t| s(t, "terminal"))
+        .collect();
+    last_focused.filter(|a| agents.iter().any(|x| x == a)).map(str::to_string).or_else(|| agents.into_iter().next())
+}
+
 /// herdr desktop's + menu always starts programs in a new tab. Move the browser into a
-/// split right of the last focused agent instead and close that tab. Returns false
+/// split right of an agent in the same space instead and close that tab. Returns false
 /// (stay put) when there's no agent to sit beside.
 /// ponytail: "last focused agent" stands in for "the tab you were on"; herdr reports no tab history.
 pub fn split_beside_agent() -> R<bool> {
     let me = env("HC_TERMINAL_ID").ok_or("not in a herdr desktop terminal")?;
     let status = run("herdr-app", &["status"])?;
-    let Some(agent) = status["agent"].as_str().filter(|a| *a != me) else { return Ok(false) };
     let ls = run("herdr-app", &["ls"])?;
-    let (Some((_, pane)), Some((my_tab, _))) = (desktop_place(&ls, agent), desktop_place(&ls, &me)) else {
+    let Some(agent) = agent_beside(&ls, status["agent"].as_str(), &me) else { return Ok(false) };
+    let (Some((_, pane)), Some((my_tab, _))) = (desktop_place(&ls, &agent), desktop_place(&ls, &me)) else {
         return Ok(false);
     };
     let exe = state::own_exe()?.display().to_string();
@@ -312,6 +339,17 @@ pub fn is_hc_owner(owner: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn sh_word_keeps_safe_words_bare_for_nushell() {
+        assert_eq!(
+            super::sh_word("/home/u/.config/herdr/x-1/target/release/herdr-web-browser"),
+            "/home/u/.config/herdr/x-1/target/release/herdr-web-browser"
+        );
+        assert_eq!(super::sh_word("w4:p14"), "w4:p14");
+        assert_eq!(super::sh_word("a b"), "'a b'");
+        assert_eq!(super::sh_word("it's"), r"'it'\''s'");
+        assert_eq!(super::sh_word(""), "''");
+    }
 
     #[test]
     fn desktop_agents_are_terminals_with_status() {
@@ -325,6 +363,29 @@ mod tests {
         assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["t3", "devdesk/t1"]);
         assert_eq!(agents[1].workspace_id, "sp2");
         assert_eq!(active.as_deref(), Some("sp2"));
+    }
+
+    #[test]
+    fn menu_browser_stays_in_its_space() {
+        let v = json!({ "spaces": [
+            { "id": "sp1", "tabs": [{ "terminals": [{ "terminal": "t6", "status": "idle", "app": "claude-code" }] }] },
+            { "id": "sp2", "tabs": [
+                { "terminals": [
+                    { "terminal": "t4", "status": null, "app": null },
+                    { "terminal": "t3", "status": "working", "app": "codex" },
+                    { "terminal": "t5", "status": "idle", "app": "claude-code" } ] },
+                { "terminals": [
+                    { "terminal": "t9", "status": null, "app": null },
+                    { "terminal": "t7", "status": "idle", "app": "claude-code" } ] } ] } ] });
+        // Last focused agent is in another space: pick one in the browser's space instead.
+        assert_eq!(agent_beside(&v, Some("t6"), "t9").as_deref(), Some("t3"));
+        // Last focused agent is in this space: it wins.
+        assert_eq!(agent_beside(&v, Some("t5"), "t9").as_deref(), Some("t5"));
+        assert_eq!(agent_beside(&v, None, "t9").as_deref(), Some("t3"));
+        // Never an agent in the browser's own tab: closing that tab would close it too.
+        assert_eq!(agent_beside(&v, Some("t7"), "t9").as_deref(), Some("t3"));
+        // No agent beside it in its own space: stay put.
+        assert_eq!(agent_beside(&v, Some("t3"), "t6"), None);
     }
 
     #[test]

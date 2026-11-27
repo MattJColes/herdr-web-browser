@@ -87,7 +87,7 @@ fn desktop_cells(cfg: &Config) -> Option<Cells> {
             .unwrap_or(1.0)
             .clamp(0.8, 2.0)
     };
-    let scale = cfg.scale.filter(|s| (0.5..=4.0).contains(s)).or_else(screen_scale).unwrap_or(1.0);
+    let scale = display_scale(cfg).unwrap_or(1.0);
     let (line_height, cell_width) = (setting("terminal_line_height"), setting("terminal_cell_width"));
     let font = settings.as_deref().and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()).and_then(|v| v["font"].as_str().map(String::from));
     if let Some((advance, line)) = font.as_deref().and_then(|f| font_metrics(f, fs)) {
@@ -133,6 +133,11 @@ fn font_metrics(font: &str, size: f64) -> Option<(f64, f64)> {
 /// px: 8 x 18 px at 14 px on a 1x Linux screen, 17 x 37 px at 14 pt on a 2x Mac.
 pub fn desktop_cell_size(font_size: f64, line_height: f64, cell_width: f64, scale: f64) -> Cells {
     measured_cell_size(font_size * 0.6, font_size * 1.32, line_height, cell_width, scale)
+}
+
+/// The configured `scale`, else the screen's backing scale.
+pub fn display_scale(cfg: &Config) -> Option<f64> {
+    cfg.scale.filter(|s| (0.5..=4.0).contains(s)).or_else(screen_scale)
 }
 
 /// The screen's backing scale (2 on Retina); herdr desktop only reports logical sizes.
