@@ -245,12 +245,22 @@ pub fn open_view(host: Host, owner: Option<&str>) -> R<String> {
                 let q = |a: &String| format!("'{}'", a.replace('\'', "''"));
                 format!("& {}", argv.iter().map(q).collect::<Vec<_>>().join(" "))
             } else {
-                let q = |a: &String| format!("'{}'", a.replace('\'', r"'\''"));
-                argv.iter().map(q).collect::<Vec<_>>().join(" ")
+                argv.iter().map(|a| sh_word(a)).collect::<Vec<_>>().join(" ")
             };
             herdr(&["pane", "run", pane, &cmd])?;
             Ok(format!("live view in pane {pane} (needs a terminal with Kitty graphics)"))
         }
+    }
+}
+
+/// One word for the pane's shell. Safe words stay bare: nushell reads a quoted first word as a
+/// string, not a command, so `'/path/herdr-web-browser' view` fails there while `/path/herdr-web-browser view` runs.
+/// shortcut: a path with spaces or quotes still breaks nushell panes; pass argv to herdr if it gains a launch option.
+fn sh_word(a: &str) -> String {
+    if !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || "/._-:".contains(c)) {
+        a.to_string()
+    } else {
+        format!("'{}'", a.replace('\'', r"'\''"))
     }
 }
 
@@ -312,6 +322,15 @@ pub fn is_hc_owner(owner: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn sh_word_keeps_safe_words_bare_for_nushell() {
+        assert_eq!(super::sh_word("/home/u/.config/herdr/x-1/target/release/herdr-web-browser"), "/home/u/.config/herdr/x-1/target/release/herdr-web-browser");
+        assert_eq!(super::sh_word("w4:p14"), "w4:p14");
+        assert_eq!(super::sh_word("a b"), "'a b'");
+        assert_eq!(super::sh_word("it's"), r"'it'\''s'");
+        assert_eq!(super::sh_word(""), "''");
+    }
+
 
     #[test]
     fn desktop_agents_are_terminals_with_status() {
