@@ -77,6 +77,8 @@ pub struct Config {
     pub view_renderer: Option<String>,
     /// What a new Browser (herdr desktop's + menu) opens on.
     pub home_page: Option<String>,
+    /// Where text typed in place of an address is searched: the query is appended.
+    pub search_url: Option<String>,
     /// Live view in herdr desktop: the screen's scale (2 on a HiDPI screen), when it isn't
     /// detected (Linux).
     pub scale: Option<f64>,
@@ -86,6 +88,8 @@ pub struct Config {
 
 pub const DEFAULT_MAX_CHARS: usize = 20_000;
 pub const DEFAULT_HOME_PAGE: &str = "https://www.google.com";
+/// Google answers automated Chrome with a captcha; DuckDuckGo serves it results.
+pub const DEFAULT_SEARCH_URL: &str = "https://duckduckgo.com/?q=";
 
 impl Config {
     pub fn load() -> R<Config> {
@@ -98,6 +102,9 @@ impl Config {
     }
     pub fn max_chars(&self) -> usize {
         self.max_chars.unwrap_or(DEFAULT_MAX_CHARS)
+    }
+    pub fn search_url(&self) -> &str {
+        self.search_url.as_deref().unwrap_or(DEFAULT_SEARCH_URL)
     }
     pub fn home_page(&self) -> &str {
         self.home_page.as_deref().unwrap_or(DEFAULT_HOME_PAGE)
@@ -132,6 +139,12 @@ pub struct State {
     pub picker: Option<Picker>,
     /// Desktop toast [title, body] waiting for the toast mod to post it.
     pub toast: Option<[String; 2]>,
+    /// CDP target id -> the viewport or device that tab emulates.
+    #[serde(default)]
+    pub emulation: BTreeMap<String, crate::emulation::Emulation>,
+    /// CDP target id -> the live view's zoom factor for that tab (absent: 100%).
+    #[serde(default)]
+    pub zoom: BTreeMap<String, f64>,
 }
 
 fn state_path(dir: &Path) -> PathBuf {

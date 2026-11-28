@@ -62,8 +62,10 @@ pub fn gc(c: &mut Cdp) -> R<()> {
     let dead = state::update(|s| {
         let dead: Vec<(String, String)> =
             s.tabs.iter().filter(|(o, _)| host::is_hc_owner(o) && !live.contains(o)).map(|(o, t)| (o.clone(), t.clone())).collect();
-        for (o, _) in &dead {
+        for (o, t) in &dead {
             s.tabs.remove(o);
+            s.emulation.remove(t);
+            s.zoom.remove(t);
         }
         dead
     })?;
@@ -78,6 +80,7 @@ pub struct Page {
     pub cdp: Cdp,
     pub tab: Tab,
     pub session: String,
+    pub search_url: String,
 }
 
 /// Which tab a command acts on:
@@ -106,7 +109,10 @@ pub fn resolve(cfg: &Config, tab: Option<usize>, create: bool) -> R<Page> {
     };
     let r = c.call("Target.attachToTarget", json!({ "targetId": chosen.id, "flatten": true }), None)?;
     let session = r["sessionId"].as_str().ok_or("attachToTarget returned no session")?.to_string();
-    Ok(Page { cdp: c, tab: chosen, session })
+    if let Some(e) = state::load()?.emulation.get(&chosen.id) {
+        e.apply(&mut c, &session)?;
+    }
+    Ok(Page { cdp: c, tab: chosen, session, search_url: cfg.search_url().to_string() })
 }
 
 /// The tab with focus, else a visible one, else the first.
@@ -132,7 +138,35 @@ fn focused_tab(c: &mut Cdp, tabs: &[Tab]) -> R<Tab> {
     Ok(visible.unwrap_or_else(|| tabs[0].clone()))
 }
 
-pub fn normalize_url(url: &str) -> String {
+/// Chrome's largest texture, in device pixels: a taller capture repeats the top of the page
+/// below this line, so full-page shots are scaled down to fit.
+const MAX_CAPTURE_DEVICE_PX: f64 = 16_384.0;
+
+fn decode(r: &Value, method: &str) -> R<Vec<u8>> {
+    use base64::Engine;
+    let data = r["data"].as_str().ok_or_else(|| format!("{method} returned no data"))?;
+    Ok(base64::engine::general_purpose::STANDARD.decode(data)?)
+}
+
+fn search(search_url: &str, query: &str) -> String {
+    let mut q = String::new();
+    for b in query.trim().bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => q.push(b as char),
+            b' ' => q.push('+'),
+            _ => q.push_str(&format!("%{b:02X}")),
+        }
+    }
+    format!("{search_url}{q}")
+}
+
+/// Turns what someone typed into a URL. Text that can't be an address (spaces, or a single word
+/// that isn't a local host) becomes a search, and a leading `?` always searches.
+pub fn normalize_url(url: &str, search_url: &str) -> String {
+    let url = url.trim();
+    if let Some(q) = url.strip_prefix('?') {
+        return search(search_url, q);
+    }
     let has_scheme = url.contains("://") || ["about:", "data:", "file:", "chrome:", "javascript:"].iter().any(|p| url.starts_with(p));
     if has_scheme {
         return url.to_string();
@@ -140,6 +174,10 @@ pub fn normalize_url(url: &str) -> String {
     // Local dev servers rarely have TLS: localhost, loopback, LAN and *.local get http.
     let host = url.split(['/', '?', '#']).next().unwrap_or("");
     let name = host.rsplit_once(':').filter(|(_, port)| port.chars().all(|c| c.is_ascii_digit())).map_or(host, |(h, _)| h);
+    let address_like = name == "localhost" || name.contains('.') || name.starts_with('[') || host.contains(':');
+    if url.contains(char::is_whitespace) || !address_like {
+        return search(search_url, url);
+    }
     let local = name == "localhost"
         || name.ends_with(".localhost")
         || name.ends_with(".local")
@@ -176,7 +214,7 @@ impl Page {
     }
 
     pub fn navigate(&mut self, url: &str) -> R<Value> {
-        let r = self.call("Page.navigate", json!({ "url": normalize_url(url) }))?;
+        let r = self.call("Page.navigate", json!({ "url": normalize_url(url, &self.search_url) }))?;
         if let Some(e) = r["errorText"].as_str().filter(|e| !e.is_empty()) {
             return Err(format!("navigation failed: {e}").into());
         }
@@ -196,6 +234,18 @@ impl Page {
         sleep(Duration::from_millis(300));
         self.wait_ready();
         self.info()
+    }
+
+    /// Counts case-insensitive matches in the page text, then selects and scrolls to the next one
+    /// (window.find carries on from the current selection, so repeating it steps through them).
+    pub fn find(&mut self, text: &str) -> R<Value> {
+        let q = serde_json::to_string(text)?;
+        self.eval(&format!(
+            "(() => {{ const q = {q}, n = q.toLowerCase(), hay = (document.body?.innerText || '').toLowerCase();\
+             let matches = 0; for (let i = n ? hay.indexOf(n) : -1; i !== -1; i = hay.indexOf(n, i + n.length)) matches++;\
+             const found = matches > 0 && window.find(q, false, false, true);\
+             return {{ query: q, matches, found }}; }})()"
+        ))
     }
 
     pub fn reload(&mut self) -> R<Value> {
@@ -285,12 +335,34 @@ impl Page {
         Ok(())
     }
 
-    pub fn screenshot(&mut self) -> R<Vec<u8>> {
-        use base64::Engine;
+    pub fn screenshot(&mut self, full: bool) -> R<Vec<u8>> {
         self.front_if_headed()?;
-        let r = self.call("Page.captureScreenshot", json!({ "format": "png" }))?;
-        let data = r["data"].as_str().ok_or("captureScreenshot returned no data")?;
-        Ok(base64::engine::general_purpose::STANDARD.decode(data)?)
+        let mut params = json!({ "format": "png" });
+        if full {
+            let m = self.call("Page.getLayoutMetrics", json!({}))?;
+            let size = &m["cssContentSize"];
+            let (w, h) = (size["width"].as_f64().unwrap_or(0.0), size["height"].as_f64().unwrap_or(0.0));
+            if w > 0.0 && h > 0.0 {
+                let dpr = self.eval("window.devicePixelRatio")?.as_f64().filter(|d| *d > 0.0).unwrap_or(1.0);
+                let scale = (MAX_CAPTURE_DEVICE_PX / (h.max(w) * dpr)).min(1.0);
+                params["captureBeyondViewport"] = json!(true);
+                params["clip"] = json!({ "x": 0, "y": 0, "width": w, "height": h, "scale": scale });
+            }
+        }
+        let r = self.call("Page.captureScreenshot", params)?;
+        decode(&r, "captureScreenshot")
+    }
+
+    /// Chrome prints to PDF only when headless.
+    pub fn pdf(&mut self) -> R<Vec<u8>> {
+        let r = self.call("Page.printToPDF", json!({ "printBackground": true, "preferCSSPageSize": true })).map_err(|e| {
+            if state::load().ok().and_then(|s| s.mode) == Some(state::Mode::Headless) {
+                e
+            } else {
+                format!("{e} (Chrome prints PDFs only when headless: run `herdr-web-browser mode headless`)").into()
+            }
+        })?;
+        decode(&r, "printToPDF")
     }
 
     pub fn wait_for(&mut self, css: &str, timeout: Duration) -> R<()> {
@@ -331,24 +403,35 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::DEFAULT_SEARCH_URL;
 
     #[test]
     fn bare_hosts_get_https() {
-        assert_eq!(normalize_url("example.com/x"), "https://example.com/x");
+        assert_eq!(normalize_url("example.com/x", DEFAULT_SEARCH_URL), "https://example.com/x");
     }
 
     #[test]
     fn local_dev_servers_get_http() {
         for u in ["localhost:3000", "127.0.0.1:8080/app", "192.168.1.20:5173", "myapp.local", "[::1]:4000"] {
-            assert_eq!(normalize_url(u), format!("http://{u}"));
+            assert_eq!(normalize_url(u, DEFAULT_SEARCH_URL), format!("http://{u}"));
         }
-        assert_eq!(normalize_url("example.com:8443/x"), "https://example.com:8443/x");
+        assert_eq!(normalize_url("example.com:8443/x", DEFAULT_SEARCH_URL), "https://example.com:8443/x");
+    }
+
+    #[test]
+    fn text_that_is_not_an_address_is_searched() {
+        assert_eq!(normalize_url("rust borrow checker", DEFAULT_SEARCH_URL), "https://duckduckgo.com/?q=rust+borrow+checker");
+        assert_eq!(normalize_url("tokio", DEFAULT_SEARCH_URL), "https://duckduckgo.com/?q=tokio");
+        assert_eq!(normalize_url("?example.com", DEFAULT_SEARCH_URL), "https://duckduckgo.com/?q=example.com");
+        assert_eq!(normalize_url("c++ & rust", DEFAULT_SEARCH_URL), "https://duckduckgo.com/?q=c%2B%2B+%26+rust");
+        assert_eq!(normalize_url("  localhost:3000 ", DEFAULT_SEARCH_URL), "http://localhost:3000");
+        assert_eq!(normalize_url("devbox:8080", DEFAULT_SEARCH_URL), "https://devbox:8080");
     }
 
     #[test]
     fn explicit_schemes_are_kept() {
         for u in ["http://a.b", "about:blank", "data:text/html,hi", "file:///tmp/x"] {
-            assert_eq!(normalize_url(u), u);
+            assert_eq!(normalize_url(u, DEFAULT_SEARCH_URL), u);
         }
     }
 }
