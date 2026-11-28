@@ -353,6 +353,13 @@ impl Page {
         decode(&r, "captureScreenshot")
     }
 
+    fn isolated_world(&mut self, name: &str) -> R<i64> {
+        let tree = self.call("Page.getFrameTree", json!({}))?;
+        let frame = tree.pointer("/frameTree/frame/id").and_then(Value::as_str).ok_or("no main frame")?.to_string();
+        let r = self.call("Page.createIsolatedWorld", json!({ "frameId": frame, "worldName": name }))?;
+        r["executionContextId"].as_i64().ok_or_else(|| "createIsolatedWorld returned no context".into())
+    }
+
     /// A PNG of a region in page coordinates (CSS px), as `pick` reports an element's `rect`.
     pub fn region_shot(&mut self, rect: &Value) -> R<Vec<u8>> {
         let n = |k: &str| rect[k].as_f64().unwrap_or(0.0);
@@ -406,7 +413,10 @@ impl Page {
     pub fn pick_shown(&mut self, prompt: &str, timeout: Duration) -> R<Value> {
         self.activate()?;
         let prelude = format!("const PROMPT = {}; const TIMEOUT_MS = {};", serde_json::to_string(prompt)?, timeout.as_millis());
-        let v = self.cdp.eval(&self.session, &script(&prelude, PICK_JS), timeout + Duration::from_secs(5))?;
+        // In the page's own world a script can patch addEventListener and hand the pick a forged
+        // event; an isolated world shares the DOM but none of the page's JavaScript.
+        let world = self.isolated_world("herdr-web-browser-pick")?;
+        let v = self.cdp.eval_in(&self.session, Some(world), &script(&prelude, PICK_JS), timeout + Duration::from_secs(5))?;
         if v["cancelled"] == true {
             return Err("pick cancelled by the user".into());
         }

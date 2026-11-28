@@ -17,6 +17,7 @@ new Promise((resolve) => {
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
   const click = (e) => {
     stop(e);
+    if (!e.isTrusted) return;
     const el = e.target;
     if (!el.dataset.herdrRef) el.setAttribute("data-herdr-ref", String(__hb.nextRef()));
     const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
@@ -29,7 +30,7 @@ new Promise((resolve) => {
       text: (el.innerText || "").trim().slice(0, 500), html: el.outerHTML.slice(0, 4000), styles,
       rect: { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height } });
   };
-  const key = (e) => { if (e.key === "Escape") { stop(e); done({ cancelled: true }); } };
+  const key = (e) => { if (e.isTrusted && e.key === "Escape") { stop(e); done({ cancelled: true }); } };
   const timer = setTimeout(() => done({ timeout: true }), TIMEOUT_MS);
   const opts = { capture: true };
   function done(v) {
