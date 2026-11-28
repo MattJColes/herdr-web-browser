@@ -4,6 +4,7 @@
 
 use crate::agent::{self, SendKind};
 use crate::cdp::Cdp;
+use crate::emulation::Emulation;
 use crate::icons::{self, Icon, Rgb};
 use crate::render::{self, Cells, IMAGE_ID, Renderer, SYNC_OFF, SYNC_ON};
 use crate::state::{self, Config, Mode};
@@ -24,13 +25,30 @@ enum Msg {
 
 /// What a stream shows: the page's emulated viewport (CSS px, headless only) and the
 /// largest frame wanted (device px; small for half blocks, which can't use more).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct StreamSize {
     viewport: (u32, u32),
     dpr: f64,
     max_frame: (u32, u32),
     /// JPEG frames for `KittyStream` (cheap for Chrome to encode); else PNG.
     jpeg: bool,
+    /// The tab's own emulated viewport or device, which replaces the pane's size, headed too.
+    emu: Option<Emulation>,
+}
+
+impl StreamSize {
+    /// The emulated screen, shrunk to fit the frames this pane can show.
+    fn emulating(self, e: Emulation) -> StreamSize {
+        let full = (e.width as f64 * e.dpr, e.height as f64 * e.dpr);
+        let fit = (self.max_frame.0 as f64 / full.0).min(self.max_frame.1 as f64 / full.1).min(1.0);
+        StreamSize {
+            viewport: (e.width, e.height),
+            dpr: e.dpr,
+            max_frame: ((full.0 * fit).round() as u32, (full.1 * fit).round() as u32),
+            jpeg: self.jpeg,
+            emu: Some(e),
+        }
+    }
 }
 
 /// Narrowest page layout for the octant view: below this, sites switch to phone layouts.
@@ -43,7 +61,7 @@ fn octant_stream_size(cols: u16, rows: u16, jpeg: bool) -> StreamSize {
     let (pw, ph) = (cols.max(1) as f64 * 2.0, rows.max(1) as f64 * 4.0);
     let css_per_px = (OCTANT_MIN_CSS_W / pw).max(2.0);
     let viewport = ((pw * css_per_px).round() as u32, (ph * css_per_px).round() as u32);
-    StreamSize { viewport, dpr: 1.0, max_frame: viewport, jpeg }
+    StreamSize { viewport, dpr: 1.0, max_frame: viewport, jpeg, emu: None }
 }
 
 /// Screencast `target` on its own connection until `stop`; acks every frame.
@@ -52,7 +70,9 @@ fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sen
         let mut c = Cdp::connect(&url)?;
         let r = c.call("Target.attachToTarget", json!({ "targetId": target, "flatten": true }), None)?;
         let sid = r["sessionId"].as_str().ok_or("no session")?.to_string();
-        if headless {
+        if let Some(e) = &size.emu {
+            e.apply(&mut c, &sid)?;
+        } else if headless {
             // Session-scoped: the page gets the pane's size only while this view watches it.
             c.call(
                 "Emulation.setDeviceMetricsOverride",
@@ -617,6 +637,15 @@ impl View {
     }
 
     fn stream_size(&self) -> StreamSize {
+        let pane = self.pane_stream_size();
+        let tab = self.page.as_ref().map(|p| p.tab.id.as_str()).unwrap_or_default();
+        match state::load().ok().and_then(|mut s| s.emulation.remove(tab)) {
+            Some(e) => pane.emulating(e),
+            None => pane,
+        }
+    }
+
+    fn pane_stream_size(&self) -> StreamSize {
         let (c, r) = Self::area();
         if self.renderer == Renderer::Octants {
             return octant_stream_size(c, r, self.raw_frames);
@@ -627,7 +656,7 @@ impl View {
             // Two pixels per cell; 4x that leaves room for box-averaging.
             _ => (c as u32 * 4, r as u32 * 8),
         };
-        StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames }
+        StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames, emu: None }
     }
 
     fn ensure_stream(&mut self) -> R<()> {
@@ -642,8 +671,15 @@ impl View {
         {
             return Ok(());
         }
+        let emulation_changed = self.streaming.as_ref().is_some_and(|st| st.size.emu != size.emu);
         if let Some(st) = self.streaming.take() {
             st.stop();
+        }
+        if emulation_changed && let Some(p) = self.page.as_mut() {
+            match &size.emu {
+                Some(e) => e.apply(&mut p.cdp, &p.session)?,
+                None => crate::emulation::clear(&mut p.cdp, &p.session)?,
+            }
         }
         let headless = state::load()?.mode == Some(Mode::Headless);
         // Hidden (background) tabs don't paint, so no frames. Headed, activating also
@@ -652,8 +688,8 @@ impl View {
             let _ = p.activate();
         }
         let stop = Arc::new(AtomicBool::new(false));
-        let (url, tx, s2, t2) = (chrome::ensure(&self.cfg)?, self.tx.clone(), stop.clone(), target.clone());
-        let thread = std::thread::spawn(move || stream(url, t2, size, headless, tx, s2));
+        let (url, tx, s2, t2, sz) = (chrome::ensure(&self.cfg)?, self.tx.clone(), stop.clone(), target.clone(), size.clone());
+        let thread = std::thread::spawn(move || stream(url, t2, sz, headless, tx, s2));
         self.streaming = Some(Stream { target, size, stop, thread });
         Ok(())
     }
@@ -1324,6 +1360,18 @@ fn event_loop(v: &mut View, rx: &Receiver<Msg>) -> R<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_emulated_device_replaces_the_pane_size_and_fits_its_frames() {
+        let pane = StreamSize { viewport: (600, 400), dpr: 2.0, max_frame: (1200, 800), jpeg: true, emu: None };
+        let iphone = crate::emulation::parse("iphone", None, false).unwrap();
+        let s = pane.clone().emulating(iphone.clone());
+        assert_eq!((s.viewport, s.dpr, s.jpeg), ((393, 852), 3.0, true));
+        assert_eq!(s.max_frame, (369, 800));
+        assert_eq!(s.emu, Some(iphone));
+        let small = crate::emulation::parse("400x300", None, false).unwrap();
+        assert_eq!(pane.emulating(small).max_frame, (400, 300));
+    }
 
     fn k(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
