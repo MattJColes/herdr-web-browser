@@ -159,7 +159,7 @@ pub fn send_from_browser(kind: SendKind, tab: Option<usize>, agent: Option<&str>
             ("selection", wrap("selection", &url, &title, &t, cfg.max_chars()), t.chars().count())
         }
         SendKind::Screenshot => {
-            let path = save_shot_in(&shots_dir(), &p.screenshot()?)?;
+            let path = save_shot_in(&shots_dir(), &p.screenshot(false)?)?;
             let t = screenshot_prompt(&url, &path);
             ("screenshot", t.clone(), t.chars().count())
         }

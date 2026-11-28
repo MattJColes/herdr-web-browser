@@ -152,7 +152,7 @@ If the view is already open, running it again reuses it.
 2. Ask your agent to open it, or run `herdr-web-browser open localhost:3000 --show`.
 3. Edit your code, then press **Reload** (↻) next to the address bar. You can also ask the agent to check the page for you.
 
-Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself.
+Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself. Text that isn't an address (it has spaces, or is one word that isn't a local host) is searched with DuckDuckGo, and a leading `?` always searches; set `search_url` to use another engine.
 
 If you skipped `install-agents`, add this line to a project's `CLAUDE.md` or `AGENTS.md` instead:
 
@@ -211,6 +211,7 @@ default_agent = "reviewer"    # agent to send to when there's a choice
 chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # use this browser instead of Chrome for Testing
 max_chars = 20000             # longest page text sent to an agent
 home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
+search_url = "https://www.bing.com/search?q="   # where typed text that isn't an address is searched
 view_renderer = "blocks"      # if the view stays blank in your terminal ("kitty", "octants" or "blocks")
 cell_aspect = 2.6             # if the page looks stretched
 scale = 2                     # herdr desktop on Linux or Windows: your screen's scale, if it isn't 1
@@ -238,6 +239,9 @@ herdr-web-browser click 3
 herdr-web-browser type 2 "hello" --submit
 herdr-web-browser text                         # the page's text
 herdr-web-browser screenshot /tmp/page.png
+herdr-web-browser screenshot /tmp/all.png --full   # the whole page, scrolled content included
+herdr-web-browser pdf /tmp/page.pdf            # the page as a PDF (headless mode)
+herdr-web-browser back                         # and forward, reload
 herdr-web-browser console                      # console output and errors, with stack traces
 herdr-web-browser network                      # requests and status codes, failures first
 herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you get it back
