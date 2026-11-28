@@ -165,7 +165,7 @@ Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-h
 | Control | What it does |
 |---|---|
 | ← → ↻ | Back, forward, reload |
-| Address bar | Click it, type an address, press Enter. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
+| Address bar | Click it, type an address or a search, press Enter. Type `/text` to find text on the page; again for the next match. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
 | Camera | Send a screenshot to the agent |
 | Window | Switch between a hidden browser (shown only in herdr) and a normal Chrome window |
 | Cog | Settings: set up agents, and sign in with your Google Chrome logins (see below) |
@@ -241,6 +241,7 @@ herdr-web-browser text                         # the page's text
 herdr-web-browser screenshot /tmp/page.png
 herdr-web-browser screenshot /tmp/all.png --full   # the whole page, scrolled content included
 herdr-web-browser pdf /tmp/page.pdf            # the page as a PDF (headless mode)
+herdr-web-browser find "Sign in"               # count matches, scroll to the next (repeat to step)
 herdr-web-browser viewport iphone              # or ipad, pixel, laptop, 390x844 --mobile; reset to fit the pane
 herdr-web-browser back                         # and forward, reload
 herdr-web-browser console                      # console output and errors, with stack traces

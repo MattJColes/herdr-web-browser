@@ -235,6 +235,18 @@ impl Page {
         self.info()
     }
 
+    /// Counts case-insensitive matches in the page text, then selects and scrolls to the next one
+    /// (window.find carries on from the current selection, so repeating it steps through them).
+    pub fn find(&mut self, text: &str) -> R<Value> {
+        let q = serde_json::to_string(text)?;
+        self.eval(&format!(
+            "(() => {{ const q = {q}, n = q.toLowerCase(), hay = (document.body?.innerText || '').toLowerCase();\
+             let matches = 0; for (let i = n ? hay.indexOf(n) : -1; i !== -1; i = hay.indexOf(n, i + n.length)) matches++;\
+             const found = matches > 0 && window.find(q, false, false, true);\
+             return {{ query: q, matches, found }}; }})()"
+        ))
+    }
+
     pub fn reload(&mut self) -> R<Value> {
         self.call("Page.reload", json!({}))?;
         sleep(Duration::from_millis(300));

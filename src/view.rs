@@ -972,6 +972,18 @@ impl View {
         self.refresh_header();
     }
 
+    /// `/text` in the address bar: a URL path never starts there without a host.
+    fn find(&mut self, q: &str) {
+        let Some(p) = self.page.as_mut() else { return };
+        match p.find(q) {
+            Ok(v) => match v["matches"].as_u64().unwrap_or(0) {
+                0 => self.say(format!("no match for {q}")),
+                n => self.say(format!("{n} match(es) for {q}; /{q} again for the next")),
+            },
+            Err(e) => self.say(format!("error: {e}")),
+        }
+    }
+
     fn history(&mut self, delta: i32) {
         if let Some(p) = self.page.as_mut() {
             let r = match delta {
@@ -1139,8 +1151,10 @@ impl View {
                 Edit::Cancel => self.url_input = None,
                 Edit::Go(url) => {
                     self.url_input = None;
-                    if !url.trim().is_empty() {
-                        self.navigate(url.trim());
+                    match url.trim().strip_prefix('/') {
+                        Some(q) if !q.trim().is_empty() => self.find(q.trim()),
+                        _ if !url.trim().is_empty() => self.navigate(url.trim()),
+                        _ => {}
                     }
                 }
             }
