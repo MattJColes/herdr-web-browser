@@ -139,6 +139,9 @@ pub struct State {
     pub picker: Option<Picker>,
     /// Desktop toast [title, body] waiting for the toast mod to post it.
     pub toast: Option<[String; 2]>,
+    /// CDP target id -> the viewport or device that tab emulates.
+    #[serde(default)]
+    pub emulation: BTreeMap<String, crate::emulation::Emulation>,
 }
 
 fn state_path(dir: &Path) -> PathBuf {

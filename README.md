@@ -241,11 +241,14 @@ herdr-web-browser text                         # the page's text
 herdr-web-browser screenshot /tmp/page.png
 herdr-web-browser screenshot /tmp/all.png --full   # the whole page, scrolled content included
 herdr-web-browser pdf /tmp/page.pdf            # the page as a PDF (headless mode)
+herdr-web-browser viewport iphone              # or ipad, pixel, laptop, 390x844 --mobile; reset to fit the pane
 herdr-web-browser back                         # and forward, reload
 herdr-web-browser console                      # console output and errors, with stack traces
 herdr-web-browser network                      # requests and status codes, failures first
 herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you get it back
 ```
+
+`viewport` emulates a screen size or device (its user agent and pixel ratio too) for that tab until `viewport reset`: the live view shows the page at that size, and every command sees it, so a screenshot is phone-sized. Sites that detect touch when they load need a `reload`. The browser menu in herdr desktop has the same switch.
 
 `console` and `network` read what the browser's extension recorded since the page loaded; add `--clear` to start fresh before reproducing a bug.
 

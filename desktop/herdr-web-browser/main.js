@@ -43,6 +43,9 @@ export default class Browser extends View {
       this.row(t, "hb-page", "Send page to agent", [...owner, "send", "page", ...to]),
       this.row(t, "hb-sel", "Send selection to agent", [...owner, "send", "selection", ...to]),
       this.row(t, "hb-shot", "Send screenshot to agent", [...owner, "send", "screenshot", ...to]),
+      this.row(t, "hb-phone", "Viewport: iPhone", [...owner, "viewport", "iphone"]),
+      this.row(t, "hb-tablet", "Viewport: iPad", [...owner, "viewport", "ipad"]),
+      this.row(t, "hb-fit", "Viewport: fit the pane", [...owner, "viewport", "reset"]),
       this.row(t, "hb-mode", "Toggle headed / headless", ["mode"]),
       this.row(t, "hb-stop", "Stop the browser", ["stop"]),
       div().id("hb-settings").px(12).py(7).rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))

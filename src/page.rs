@@ -62,8 +62,9 @@ pub fn gc(c: &mut Cdp) -> R<()> {
     let dead = state::update(|s| {
         let dead: Vec<(String, String)> =
             s.tabs.iter().filter(|(o, _)| host::is_hc_owner(o) && !live.contains(o)).map(|(o, t)| (o.clone(), t.clone())).collect();
-        for (o, _) in &dead {
+        for (o, t) in &dead {
             s.tabs.remove(o);
+            s.emulation.remove(t);
         }
         dead
     })?;
@@ -107,6 +108,9 @@ pub fn resolve(cfg: &Config, tab: Option<usize>, create: bool) -> R<Page> {
     };
     let r = c.call("Target.attachToTarget", json!({ "targetId": chosen.id, "flatten": true }), None)?;
     let session = r["sessionId"].as_str().ok_or("attachToTarget returned no session")?.to_string();
+    if let Some(e) = state::load()?.emulation.get(&chosen.id) {
+        e.apply(&mut c, &session)?;
+    }
     Ok(Page { cdp: c, tab: chosen, session, search_url: cfg.search_url().to_string() })
 }
 
