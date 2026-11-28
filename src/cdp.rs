@@ -75,12 +75,20 @@ impl Cdp {
 
     /// Evaluate JS in a page session; awaits promises and returns the value by value.
     pub fn eval(&mut self, session: &str, expr: &str, timeout: Duration) -> R<Value> {
-        let params = json!({
+        self.eval_in(session, None, expr, timeout)
+    }
+
+    /// `context`: an execution context such as an isolated world; None is the page's main world.
+    pub fn eval_in(&mut self, session: &str, context: Option<i64>, expr: &str, timeout: Duration) -> R<Value> {
+        let mut params = json!({
             "expression": expr,
             "returnByValue": true,
             "awaitPromise": true,
             "userGesture": true,
         });
+        if let Some(id) = context {
+            params["contextId"] = json!(id);
+        }
         let r = self.call_timeout("Runtime.evaluate", params, Some(session), timeout)?;
         if let Some(ex) = r.get("exceptionDetails") {
             let m = ex.pointer("/exception/description").or_else(|| ex.get("text")).and_then(Value::as_str).unwrap_or("JS exception");
