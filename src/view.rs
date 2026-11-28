@@ -34,9 +34,16 @@ struct StreamSize {
     jpeg: bool,
     /// The tab's own emulated viewport or device, which replaces the pane's size, headed too.
     emu: Option<Emulation>,
+    /// Browser-style zoom: the page lays out in fewer, larger CSS px. Headed too when not 1.
+    zoom: f64,
 }
 
 impl StreamSize {
+    fn zoomed(self, z: f64) -> StreamSize {
+        let viewport = ((self.viewport.0 as f64 / z).round() as u32, (self.viewport.1 as f64 / z).round() as u32);
+        StreamSize { viewport, dpr: self.dpr * z, zoom: z, ..self }
+    }
+
     /// The emulated screen, shrunk to fit the frames this pane can show.
     fn emulating(self, e: Emulation) -> StreamSize {
         let full = (e.width as f64 * e.dpr, e.height as f64 * e.dpr);
@@ -47,6 +54,7 @@ impl StreamSize {
             max_frame: ((full.0 * fit).round() as u32, (full.1 * fit).round() as u32),
             jpeg: self.jpeg,
             emu: Some(e),
+            zoom: 1.0,
         }
     }
 }
@@ -61,7 +69,7 @@ fn octant_stream_size(cols: u16, rows: u16, jpeg: bool) -> StreamSize {
     let (pw, ph) = (cols.max(1) as f64 * 2.0, rows.max(1) as f64 * 4.0);
     let css_per_px = (OCTANT_MIN_CSS_W / pw).max(2.0);
     let viewport = ((pw * css_per_px).round() as u32, (ph * css_per_px).round() as u32);
-    StreamSize { viewport, dpr: 1.0, max_frame: viewport, jpeg, emu: None }
+    StreamSize { viewport, dpr: 1.0, max_frame: viewport, jpeg, emu: None, zoom: 1.0 }
 }
 
 /// Screencast `target` on its own connection until `stop`; acks every frame.
@@ -72,7 +80,7 @@ fn stream(url: String, target: String, size: StreamSize, headless: bool, tx: Sen
         let sid = r["sessionId"].as_str().ok_or("no session")?.to_string();
         if let Some(e) = &size.emu {
             e.apply(&mut c, &sid)?;
-        } else if headless {
+        } else if headless || size.zoom != 1.0 {
             // Session-scoped: the page gets the pane's size only while this view watches it.
             c.call(
                 "Emulation.setDeviceMetricsOverride",
@@ -639,9 +647,11 @@ impl View {
     fn stream_size(&self) -> StreamSize {
         let pane = self.pane_stream_size();
         let tab = self.page.as_ref().map(|p| p.tab.id.as_str()).unwrap_or_default();
-        match state::load().ok().and_then(|mut s| s.emulation.remove(tab)) {
-            Some(e) => pane.emulating(e),
-            None => pane,
+        let Ok(mut s) = state::load() else { return pane };
+        match (s.emulation.remove(tab), s.zoom.remove(tab)) {
+            (Some(e), _) => pane.emulating(e),
+            (None, Some(z)) => pane.zoomed(z),
+            (None, None) => pane,
         }
     }
 
@@ -656,7 +666,7 @@ impl View {
             // Two pixels per cell; 4x that leaves room for box-averaging.
             _ => (c as u32 * 4, r as u32 * 8),
         };
-        StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames, emu: None }
+        StreamSize { viewport, dpr: self.cells.dpr, max_frame, jpeg: self.raw_frames, emu: None, zoom: 1.0 }
     }
 
     fn ensure_stream(&mut self) -> R<()> {
@@ -972,6 +982,22 @@ impl View {
         self.refresh_header();
     }
 
+    /// The next tick restarts the stream at the new size.
+    fn zoom(&mut self, step: &str) -> R<bool> {
+        let Some(id) = self.page.as_ref().map(|p| p.tab.id.clone()) else { return Ok(true) };
+        let z = state::update(|s| -> R<f64> {
+            let z = crate::emulation::zoom(s.zoom.get(&id).copied().unwrap_or(1.0), step)?;
+            if (z - 1.0).abs() < 1e-6 {
+                s.zoom.remove(&id);
+            } else {
+                s.zoom.insert(id.clone(), z);
+            }
+            Ok(z)
+        })??;
+        self.say(format!("zoom {}%", (z * 100.0).round()));
+        Ok(true)
+    }
+
     /// `/text` in the address bar: a URL path never starts there without a host.
     fn find(&mut self, q: &str) {
         let Some(p) = self.page.as_mut() else { return };
@@ -1175,6 +1201,9 @@ impl View {
                 's' => Act::SendSelection,
                 'x' => Act::Screenshot,
                 'e' => Act::Mode,
+                '=' | '+' => return self.zoom("in"),
+                '-' => return self.zoom("out"),
+                '0' => return self.zoom("reset"),
                 _ => {
                     self.key(k)?;
                     return Ok(true);
@@ -1377,7 +1406,7 @@ mod tests {
 
     #[test]
     fn an_emulated_device_replaces_the_pane_size_and_fits_its_frames() {
-        let pane = StreamSize { viewport: (600, 400), dpr: 2.0, max_frame: (1200, 800), jpeg: true, emu: None };
+        let pane = StreamSize { viewport: (600, 400), dpr: 2.0, max_frame: (1200, 800), jpeg: true, emu: None, zoom: 1.0 };
         let iphone = crate::emulation::parse("iphone", None, false).unwrap();
         let s = pane.clone().emulating(iphone.clone());
         assert_eq!((s.viewport, s.dpr, s.jpeg), ((393, 852), 3.0, true));
@@ -1385,6 +1414,13 @@ mod tests {
         assert_eq!(s.emu, Some(iphone));
         let small = crate::emulation::parse("400x300", None, false).unwrap();
         assert_eq!(pane.emulating(small).max_frame, (400, 300));
+    }
+
+    #[test]
+    fn zoom_lays_the_page_out_in_larger_css_px_on_the_same_frame() {
+        let pane = StreamSize { viewport: (600, 400), dpr: 2.0, max_frame: (1200, 800), jpeg: false, emu: None, zoom: 1.0 };
+        let z = pane.zoomed(1.5);
+        assert_eq!((z.viewport, z.dpr, z.max_frame, z.zoom), ((400, 267), 3.0, (1200, 800), 1.5));
     }
 
     fn k(code: KeyCode) -> KeyEvent {

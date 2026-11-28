@@ -65,6 +65,7 @@ pub fn gc(c: &mut Cdp) -> R<()> {
         for (o, t) in &dead {
             s.tabs.remove(o);
             s.emulation.remove(t);
+            s.zoom.remove(t);
         }
         dead
     })?;

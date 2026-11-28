@@ -96,6 +96,27 @@ impl Emulation {
     }
 }
 
+/// Chrome's own zoom steps.
+const ZOOM_LEVELS: &[f64] = &[0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+
+/// `in`, `out`, `reset`, or a level as `125`, `125%` or `1.25`.
+pub fn zoom(current: f64, arg: &str) -> R<f64> {
+    let arg = arg.trim().to_lowercase();
+    let next = match arg.as_str() {
+        "in" | "+" => ZOOM_LEVELS.iter().copied().find(|z| *z > current + 1e-6).unwrap_or(current),
+        "out" | "-" => ZOOM_LEVELS.iter().rev().copied().find(|z| *z < current - 1e-6).unwrap_or(current),
+        "reset" | "0" => 1.0,
+        n => {
+            let v: f64 = n.trim_end_matches('%').parse().map_err(|_| format!("zoom: expected in, out, reset or a level like 125%, got {n:?}"))?;
+            if n.ends_with('%') || v > 5.0 { v / 100.0 } else { v }
+        }
+    };
+    if !(0.25..=3.0).contains(&next) {
+        return Err(format!("zoom: {}% is outside 25%..300%", (next * 100.0).round()).into());
+    }
+    Ok(next)
+}
+
 pub fn clear(cdp: &mut Cdp, session: &str) -> R<()> {
     let sid = Some(session);
     cdp.call("Emulation.clearDeviceMetricsOverride", json!({}), sid)?;
@@ -126,6 +147,21 @@ mod tests {
         assert!(parse("10x10", None, false).is_err());
         assert!(parse("800x600", Some(9.0), false).is_err());
         assert!(parse("800by600", None, false).is_err());
+    }
+
+    #[test]
+    fn zoom_steps_like_chrome_and_takes_levels() {
+        assert_eq!(zoom(1.0, "in").unwrap(), 1.1);
+        assert_eq!(zoom(1.1, "in").unwrap(), 1.25);
+        assert_eq!(zoom(1.0, "out").unwrap(), 0.9);
+        assert_eq!(zoom(1.2, "out").unwrap(), 1.1);
+        assert_eq!(zoom(3.0, "in").unwrap(), 3.0);
+        assert_eq!(zoom(1.5, "reset").unwrap(), 1.0);
+        assert_eq!(zoom(1.0, "125%").unwrap(), 1.25);
+        assert_eq!(zoom(1.0, "150").unwrap(), 1.5);
+        assert_eq!(zoom(1.0, "0.8").unwrap(), 0.8);
+        assert!(zoom(1.0, "400%").is_err());
+        assert!(zoom(1.0, "big").is_err());
     }
 
     #[test]

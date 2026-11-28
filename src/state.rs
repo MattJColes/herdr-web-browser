@@ -142,6 +142,9 @@ pub struct State {
     /// CDP target id -> the viewport or device that tab emulates.
     #[serde(default)]
     pub emulation: BTreeMap<String, crate::emulation::Emulation>,
+    /// CDP target id -> the live view's zoom factor for that tab (absent: 100%).
+    #[serde(default)]
+    pub zoom: BTreeMap<String, f64>,
 }
 
 fn state_path(dir: &Path) -> PathBuf {
