@@ -152,7 +152,7 @@ If the view is already open, running it again reuses it.
 2. Ask your agent to open it, or run `herdr-web-browser open localhost:3000 --show`.
 3. Edit your code, then press **Reload** (↻) next to the address bar. You can also ask the agent to check the page for you.
 
-Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself.
+Addresses on your own machine or network (`localhost`, `127.0.0.1`, `192.168.x.x`, `*.local`) open with `http://`. Everything else uses `https://`. Type the full address to choose yourself. Text that isn't an address (it has spaces, or is one word that isn't a local host) is searched with DuckDuckGo, and a leading `?` always searches; set `search_url` to use another engine.
 
 If you skipped `install-agents`, add this line to a project's `CLAUDE.md` or `AGENTS.md` instead:
 
@@ -165,7 +165,7 @@ Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-h
 | Control | What it does |
 |---|---|
 | ← → ↻ | Back, forward, reload |
-| Address bar | Click it, type an address, press Enter. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
+| Address bar | Click it, type an address or a search, press Enter. Type `/text` to find text on the page; again for the next match. Esc cancels. Double-click selects a word, triple-click selects everything, and drag or Shift+arrows select part of it. |
 | Camera | Send a screenshot to the agent |
 | Window | Switch between a hidden browser (shown only in herdr) and a normal Chrome window |
 | Cog | Settings: set up agents, and sign in with your Google Chrome logins (see below) |
@@ -211,6 +211,7 @@ default_agent = "reviewer"    # agent to send to when there's a choice
 chrome_path = "/Applications/Chromium.app/Contents/MacOS/Chromium"   # use this browser instead of Chrome for Testing
 max_chars = 20000             # longest page text sent to an agent
 home_page = "https://www.google.com"   # what a new Browser from the + menu opens on
+search_url = "https://www.bing.com/search?q="   # where typed text that isn't an address is searched
 view_renderer = "blocks"      # if the view stays blank in your terminal ("kitty", "octants" or "blocks")
 cell_aspect = 2.6             # if the page looks stretched
 scale = 2                     # herdr desktop on Linux or Windows: your screen's scale, if it isn't 1
@@ -238,10 +239,17 @@ herdr-web-browser click 3
 herdr-web-browser type 2 "hello" --submit
 herdr-web-browser text                         # the page's text
 herdr-web-browser screenshot /tmp/page.png
+herdr-web-browser screenshot /tmp/all.png --full   # the whole page, scrolled content included
+herdr-web-browser pdf /tmp/page.pdf            # the page as a PDF (headless mode)
+herdr-web-browser find "Sign in"               # count matches, scroll to the next (repeat to step)
+herdr-web-browser viewport iphone              # or ipad, pixel, laptop, 390x844 --mobile; reset to fit the pane
+herdr-web-browser back                         # and forward, reload
 herdr-web-browser console                      # console output and errors, with stack traces
 herdr-web-browser network                      # requests and status codes, failures first
 herdr-web-browser pick --prompt "Which row?"   # the user clicks something; you get it back
 ```
+
+`viewport` emulates a screen size or device (its user agent and pixel ratio too) for that tab until `viewport reset`: the live view shows the page at that size, and every command sees it, so a screenshot is phone-sized. Sites that detect touch when they load need a `reload`. The browser menu in herdr desktop has the same switch.
 
 `console` and `network` read what the browser's extension recorded since the page loaded; add `--clear` to start fresh before reproducing a bug.
 
