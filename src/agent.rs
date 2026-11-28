@@ -3,6 +3,7 @@
 use crate::host::{self, Host};
 use crate::state::{self, Config, Picker};
 use crate::{R, page};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -135,6 +136,26 @@ pub enum SendKind {
     Page,
     Selection,
     Screenshot,
+    /// The user clicks an element in the page; it goes with its HTML, styles and a picture.
+    Element,
+}
+
+/// What the agent gets for a picked element; the caller wraps it as untrusted.
+pub fn element_body(v: &Value, shot: Option<&Path>) -> String {
+    let s = |k: &str| v[k].as_str().unwrap_or_default();
+    let mut out = format!("selector: {}\nrole: {} {:?}\n", s("selector"), s("role"), s("name"));
+    if let Some(p) = shot {
+        out.push_str(&format!("picture: {} (read the image file to view it)\n", p.display()));
+    }
+    if !s("text").is_empty() {
+        out.push_str(&format!("text: {}\n", s("text")));
+    }
+    if let Some(styles) = v["styles"].as_object() {
+        let css: Vec<String> = styles.iter().filter_map(|(k, v)| v.as_str().filter(|v| !v.is_empty()).map(|v| format!("{k}: {v}"))).collect();
+        out.push_str(&format!("computed style: {}\n", css.join("; ")));
+    }
+    out.push_str(&format!("html:\n{}", s("html")));
+    out
 }
 
 /// Send the caller's (or focused) tab to the resolved agent. Returns the target.
@@ -162,6 +183,12 @@ pub fn send_from_browser(kind: SendKind, tab: Option<usize>, agent: Option<&str>
             let path = save_shot_in(&shots_dir(), &p.screenshot(false)?)?;
             let t = screenshot_prompt(&url, &path);
             ("screenshot", t.clone(), t.chars().count())
+        }
+        SendKind::Element => {
+            let v = p.pick_shown("Click the element to send to your agent", Duration::from_secs(120))?;
+            let shot = p.region_shot(&v["rect"]).ok().and_then(|png| save_shot_in(&shots_dir(), &png).ok());
+            let body = element_body(&v, shot.as_deref());
+            ("element", wrap("element", &url, &title, &body, cfg.max_chars()), body.chars().count())
         }
     };
     drop(p);
@@ -216,6 +243,19 @@ mod tests {
         assert!(w.starts_with("[herdr-web-browser] page from https://x.test \"X\" (untrusted web content"));
         assert!(w.contains("abc\n[truncated: 3 of 6 chars]"));
         assert!(!w.contains("abcd"));
+    }
+
+    #[test]
+    fn element_body_carries_selector_picture_text_styles_and_html() {
+        let v = json!({ "selector": "#buy", "role": "button", "name": "Buy now", "text": "Buy now",
+            "styles": { "display": "flex", "color": "rgb(0, 0, 0)", "z-index": "" }, "html": "<button id=\"buy\">Buy now</button>" });
+        let b = element_body(&v, Some(Path::new("/tmp/s/1.png")));
+        assert_eq!(
+            b,
+            "selector: #buy\nrole: button \"Buy now\"\npicture: /tmp/s/1.png (read the image file to view it)\ntext: Buy now\n\
+             computed style: display: flex; color: rgb(0, 0, 0)\nhtml:\n<button id=\"buy\">Buy now</button>"
+        );
+        assert!(!element_body(&v, None).contains("picture:"));
     }
 
     #[test]

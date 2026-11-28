@@ -19,8 +19,15 @@ new Promise((resolve) => {
     stop(e);
     const el = e.target;
     if (!el.dataset.herdrRef) el.setAttribute("data-herdr-ref", String(__hb.nextRef()));
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    const styles = {};
+    for (const k of ["display", "position", "width", "height", "margin", "padding", "color", "background-color",
+      "font-family", "font-size", "font-weight", "line-height", "border", "border-radius", "z-index", "overflow"]) {
+      styles[k] = cs.getPropertyValue(k);
+    }
     done({ ref: +el.dataset.herdrRef, role: __hb.role(el), name: __hb.name(el), selector: __hb.selector(el),
-      text: (el.innerText || "").trim().slice(0, 500) });
+      text: (el.innerText || "").trim().slice(0, 500), html: el.outerHTML.slice(0, 4000), styles,
+      rect: { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height } });
   };
   const key = (e) => { if (e.key === "Escape") { stop(e); done({ cancelled: true }); } };
   const timer = setTimeout(() => done({ timeout: true }), TIMEOUT_MS);

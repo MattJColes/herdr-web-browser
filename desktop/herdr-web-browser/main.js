@@ -43,6 +43,7 @@ export default class Browser extends View {
       this.row(t, "hb-page", "Send page to agent", [...owner, "send", "page", ...to]),
       this.row(t, "hb-sel", "Send selection to agent", [...owner, "send", "selection", ...to]),
       this.row(t, "hb-shot", "Send screenshot to agent", [...owner, "send", "screenshot", ...to]),
+      this.row(t, "hb-elem", "Pick an element for agent", [...owner, "send", "element", ...to]),
       this.row(t, "hb-phone", "Viewport: iPhone", [...owner, "viewport", "iphone"]),
       this.row(t, "hb-tablet", "Viewport: iPad", [...owner, "viewport", "ipad"]),
       this.row(t, "hb-fit", "Viewport: fit the pane", [...owner, "viewport", "reset"]),

@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 enum Msg {
     Frame { data: String, w: f64, h: f64 },
     Gone(String),
+    Said(String),
 }
 
 /// What a stream shows: the page's emulated viewport (CSS px, headless only) and the
@@ -447,6 +448,7 @@ enum Act {
     TabNext,
     SendPage,
     SendSelection,
+    SendElement,
     Screenshot,
     Mode,
     Settings,
@@ -840,6 +842,7 @@ impl View {
             Act::TabNext => "Next tab",
             Act::SendPage => "Send page to agent",
             Act::SendSelection => "Send selection to agent",
+            Act::SendElement => "Pick an element to send to agent",
             Act::Screenshot => "Send screenshot to agent",
             Act::Mode if self.mode == Mode::Headed => "Run headless",
             Act::Mode => "Open in a window",
@@ -1099,6 +1102,7 @@ impl View {
             SendKind::Page => "page",
             SendKind::Selection => "selection",
             SendKind::Screenshot => "screenshot",
+            SendKind::Element => "element",
         };
         self.say(format!("sending {label}…"));
         let _ = self.draw_chrome();
@@ -1114,10 +1118,22 @@ impl View {
                 .and_then(|tabs| tabs.iter().position(|t| &t.id == id).map(|i| i + 1)),
             _ => None,
         };
-        match agent::send_from_browser(kind, tab, agent.as_deref(), &self.cfg) {
-            Ok(t) => self.say(format!("✓ sent {label} to {t}")),
-            Err(e) => self.say(format!("error: {e}")),
+        let result = move |r: R<String>| match r {
+            Ok(t) => format!("✓ sent {label} to {t}"),
+            Err(e) => format!("error: {e}"),
+        };
+        if let SendKind::Element = kind {
+            // The pick waits for a click this loop must forward to the page.
+            self.say("click the element to send (Esc cancels)");
+            let tx = self.tx.clone();
+            std::thread::spawn(move || {
+                let r = Config::load().and_then(|cfg| agent::send_from_browser(kind, tab, agent.as_deref(), &cfg));
+                let _ = tx.send(Msg::Said(result(r)));
+            });
+            return;
         }
+        let msg = result(agent::send_from_browser(kind, tab, agent.as_deref(), &self.cfg));
+        self.say(msg);
     }
 
     /// The settings dialog is a herdr desktop mod; elsewhere, point at the commands.
@@ -1161,6 +1177,7 @@ impl View {
             Act::TabNext => self.switch_tab(1)?,
             Act::SendPage => self.send(SendKind::Page),
             Act::SendSelection => self.send(SendKind::Selection),
+            Act::SendElement => self.send(SendKind::Element),
             Act::Screenshot => self.send(SendKind::Screenshot),
             Act::Mode => self.toggle_mode()?,
             Act::Settings => self.open_settings(),
@@ -1200,6 +1217,7 @@ impl View {
                 'g' => Act::SendPage,
                 's' => Act::SendSelection,
                 'x' => Act::Screenshot,
+                'k' => Act::SendElement,
                 'e' => Act::Mode,
                 '=' | '+' => return self.zoom("in"),
                 '-' => return self.zoom("out"),
@@ -1357,6 +1375,7 @@ fn event_loop(v: &mut View, rx: &Receiver<Msg>) -> R<()> {
                     v.reset();
                     v.say(format!("view lost: {e}; reattaching"));
                 }
+                Msg::Said(s) => v.say(s),
             }
         }
         if let Some((data, w, h)) = latest

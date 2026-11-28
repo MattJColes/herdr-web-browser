@@ -353,6 +353,18 @@ impl Page {
         decode(&r, "captureScreenshot")
     }
 
+    /// A PNG of a region in page coordinates (CSS px), as `pick` reports an element's `rect`.
+    pub fn region_shot(&mut self, rect: &Value) -> R<Vec<u8>> {
+        let n = |k: &str| rect[k].as_f64().unwrap_or(0.0);
+        let (w, h) = (n("width"), n("height").min(MAX_CAPTURE_DEVICE_PX / 4.0));
+        if w < 1.0 || h < 1.0 {
+            return Err("the element has no visible area".into());
+        }
+        let clip = json!({ "x": n("x"), "y": n("y"), "width": w, "height": h, "scale": 1 });
+        let r = self.call("Page.captureScreenshot", json!({ "format": "png", "clip": clip, "captureBeyondViewport": true }))?;
+        decode(&r, "captureScreenshot")
+    }
+
     /// Chrome prints to PDF only when headless.
     pub fn pdf(&mut self) -> R<Vec<u8>> {
         let r = self.call("Page.printToPDF", json!({ "printBackground": true, "preferCSSPageSize": true })).map_err(|e| {
@@ -387,6 +399,11 @@ impl Page {
         if state::load()?.mode == Some(state::Mode::Headless) {
             return Err("pick needs a visible browser: run `herdr-web-browser mode headed`".into());
         }
+        self.pick_shown(prompt, timeout)
+    }
+
+    /// For a page the user can already see and click (headed, or a headless tab in the live view).
+    pub fn pick_shown(&mut self, prompt: &str, timeout: Duration) -> R<Value> {
         self.activate()?;
         let prelude = format!("const PROMPT = {}; const TIMEOUT_MS = {};", serde_json::to_string(prompt)?, timeout.as_millis());
         let v = self.cdp.eval(&self.session, &script(&prelude, PICK_JS), timeout + Duration::from_secs(5))?;

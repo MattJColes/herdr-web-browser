@@ -172,7 +172,7 @@ Use herdr-web-browser to view and test web pages. Run `herdr-web-browser agent-h
 
 Hover over a button and its name shows in the address bar, which also shows messages such as "sent screenshot" for a few seconds.
 
-Keyboard shortcuts: `Ctrl-=`/`Ctrl--`/`Ctrl-0` zoom in, out and back to 100% (also `herdr-web-browser zoom` and the browser menu), `Ctrl-L` address bar, `Ctrl-B`/`Ctrl-F` back/forward, `Ctrl-R` reload, `Ctrl-N`/`Ctrl-P` next/previous tab (the agent beside the view uses the tab you pick), `Ctrl-G` send page, `Ctrl-S` send selection, `Ctrl-X` screenshot, `Ctrl-E` window mode, `Ctrl-Q` close the view (the browser keeps running).
+Keyboard shortcuts: `Ctrl-=`/`Ctrl--`/`Ctrl-0` zoom in, out and back to 100% (also `herdr-web-browser zoom` and the browser menu), `Ctrl-L` address bar, `Ctrl-B`/`Ctrl-F` back/forward, `Ctrl-R` reload, `Ctrl-N`/`Ctrl-P` next/previous tab (the agent beside the view uses the tab you pick), `Ctrl-G` send page, `Ctrl-S` send selection, `Ctrl-X` screenshot, `Ctrl-K` pick an element (click it in the page) and send its selector, text, computed style, HTML and a picture of it, `Ctrl-E` window mode, `Ctrl-Q` close the view (the browser keeps running).
 
 Inside Chrome itself, right-click to send a selection, page, link or screenshot to your agent.
 
